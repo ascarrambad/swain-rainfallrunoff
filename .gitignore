@@ -1,6 +1,8 @@
 
+examples
 data
 logs
+tsl_config/*
 
 .idea
 ics_*
