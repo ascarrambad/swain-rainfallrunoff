@@ -33,9 +33,9 @@ import pathlib
 import datetime
 import yaml
 
-from tsl.nn.models.stgn.dcrnn_model import DCRNNModel
-from tsl.nn.models.stgn.stcn_model import STCNModel
-from tsl.nn.models.stgn.graph_wavenet_model import GraphWaveNetModel
+from models.dcrnn_model import SWAIN_DCRNNModel
+from models.stcn_model import SWAIN_STCNModel
+from models.grawave_model import SWAIN_GraphWaveNetModel
 
 from dataset.lamah import LamaH
 from metrics import MaskedNSE, np_masked_nse
@@ -44,11 +44,13 @@ import tsl_config
 
 def get_model_class(model_str):
     if model_str == 'dcrnn':
-        model = DCRNNModel
+        model = SWAIN_DCRNNModel
     elif model_str == 'stcn':
-        model = STCNModel
+        model = SWAIN_STCNModel
+    elif model_str == 'gatedgn':
+        model = ''
     elif model_str == 'gwnet':
-        model = GraphWaveNetModel
+        model = SWAIN_GraphWaveNetModel
     else:
         raise NotImplementedError(f'Model "{model_str}" not available.')
     return model
@@ -69,7 +71,7 @@ def add_parser_arguments(parent):
     parser.add_argument('--seed', type=int, default=-1)
     parser.add_argument("--model-name", type=str, default='dcrnn')
     parser.add_argument("--dataset-name", type=str, default='lamah')
-    parser.add_argument("--config", type=str, default=None)
+    parser.add_argument("--config", type=str, default='dcrnn.yaml')
     # training
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--l2-reg', type=float, default=0.),
@@ -127,18 +129,20 @@ def run_experiment(args):
     # data module                          #
     ########################################
 
-    adj = dataset.get_connectivity(method='distance',
-                                   sparse=False)
+    edge_index = dataset.get_connectivity(method='distance',
+                                          layout='edge_index')
 
     torch_dataset = SpatioTemporalDataset(*dataset.numpy(return_idx=True),
-                                          connectivity=adj.T,
+                                          connectivity=edge_index,
                                           mask=dataset.mask,
                                           horizon=args.horizon,
                                           window=args.window,
                                           stride=args.stride,
                                           exogenous=dataset.exogenous)
 
-    # torch_dataset.update_input_map(u_h=(['u'], HORIZON))
+    torch_dataset.set_input_map(x=(['data'], WINDOW),
+                                u_w=(['u'], WINDOW),
+                                u_h=(['u'], HORIZON))
 
     dm_conf = parser_utils.filter_args(args, SpatioTemporalDataModule, return_dict=True)
     dm = SpatioTemporalDataModule(
@@ -158,7 +162,7 @@ def run_experiment(args):
                                     input_size=torch_dataset.n_channels,
                                     output_size=torch_dataset.n_channels,
                                     horizon=torch_dataset.horizon,
-                                    exog_size=torch_dataset.input_map.u.n_channels)
+                                    exog_size=torch_dataset.input_map.u_w.n_channels)
 
     model_kwargs = parser_utils.filter_args(args={**vars(args), **additional_model_hparams},
                                             target_cls=model_cls,
