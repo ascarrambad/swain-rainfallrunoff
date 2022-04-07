@@ -191,6 +191,7 @@ def run_experiment(args):
             'eta_min': 0.0001,
             'T_max': args.epochs
         },
+        scale_target=True
     )
 
     ########################################
@@ -239,7 +240,8 @@ def run_experiment(args):
                          logger=logger,
                          gpus=1 if torch.cuda.is_available() else None,
                          gradient_clip_val=args.grad_clip_val,
-                         callbacks=[early_stop_callback, checkpoint_callback])
+                         callbacks=[early_stop_callback, checkpoint_callback],
+                         track_grad_norm=2)
 
     trainer.fit(predictor, datamodule=dm)
 
