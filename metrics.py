@@ -54,7 +54,7 @@ class MaskedNSE(MaskedMetric):
 
 ################################################################################
 
-def np_masked_nse(y_hat, y, masked=None):
+def np_masked_nse(y_hat, y, mask=None):
     if mask is None:
         mask = np.ones(y.shape, dtype=bool)
     else:
