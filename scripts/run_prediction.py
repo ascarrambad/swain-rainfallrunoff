@@ -130,7 +130,8 @@ def run_experiment(args):
     ########################################
 
     edge_index = dataset.get_connectivity(method='distance',
-                                          layout='edge_index')
+                                          layout='edge_index',
+                                          include_self=False)
 
     torch_dataset = SpatioTemporalDataset(*dataset.numpy(return_idx=True),
                                           connectivity=edge_index,
@@ -240,8 +241,7 @@ def run_experiment(args):
                          logger=logger,
                          gpus=1 if torch.cuda.is_available() else None,
                          gradient_clip_val=args.grad_clip_val,
-                         callbacks=[early_stop_callback, checkpoint_callback],
-                         track_grad_norm=2)
+                         callbacks=[early_stop_callback, checkpoint_callback])
 
     trainer.fit(predictor, datamodule=dm)
 

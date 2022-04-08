@@ -71,12 +71,19 @@ class LamaH(PandasDataset):
 
         gauges_files = set(os.listdir(gauges_path))
         exos_files = set(os.listdir(exos_path))
-        common_files = list(gauges_files.intersection(exos_files))
+        gauge_hierarchy_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/1_attributes/Gauge_hierarchy.csv')
+        gauge_hierarchy = pd.read_csv(gauge_hierarchy_path, sep=';').set_index('ID')
+        isolated_nodes = gauge_hierarchy[(gauge_hierarchy['NEXTDOWNID']==0) & (gauge_hierarchy['HIERARCHY']==1)].index.tolist()
+        isolated_nodes = set(map(lambda x: f'ID_{x}.csv', isolated_nodes))
+
+        common_files = list(gauges_files.intersection(exos_files).difference(isolated_nodes))
         excluded_files = list(gauges_files.difference(exos_files))
 
         if len(excluded_files) > 0:
             logger.warning(f'These {len(excluded_files)} gauges do not have a matching basin, and have been excluded:\n{excluded_files}')
 
+        if len(list(isolated_nodes)) > 0:
+            logger.warning(f'These {len(list(isolated_nodes))} gauges are isolated and have been excluded:\n{isolated_nodes}')
 
         # Build data & exogenous time series
         for i, gauge_filename in enumerate(common_files):
@@ -105,11 +112,8 @@ class LamaH(PandasDataset):
             exo_df = exo_df.filter(gauge_df.index, axis=0)
             exo_df = pd.concat([exo_df, self.get_datetime_features(exo_df)], axis=1)
 
-            # reindex = pd.MultiIndex.from_product(iterables=[[gauge_id], exo_df.columns],
-            #                                      names=('id', 'date'))
-            # ts_exos_df = ts_exos_df.append(exo_df.set_index(reindex))
             exo_df.columns = pd.MultiIndex.from_product(iterables=[[gauge_id], exo_df.columns],
-                                                        names=('id', 'exogenous'))
+                                                        names=('id', 'u'))
             ts_exos_dfs.append(exo_df)
 
         ts_qobs_df = pd.concat(ts_qobs_dfs, axis=1)
@@ -128,7 +132,7 @@ class LamaH(PandasDataset):
         # attrib_gauges_df = pd.read_csv(attrib_gauges_path, sep=';').set_index('ID')
         attrib_exos_df = pd.read_csv(attrib_exos_path, sep=';').iloc[:, :-1].set_index('ID')
 
-        attribs_dict = {'u': attrib_exos_df}
+        attribs_dict = {'catchment': attrib_exos_df}
 
         # Build distances matrix
         ids = list(ts_qobs_df.columns)
