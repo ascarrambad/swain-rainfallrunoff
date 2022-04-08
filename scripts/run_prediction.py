@@ -253,7 +253,7 @@ def run_experiment(args):
        torch.load(checkpoint_callback.best_model_path, lambda storage, loc: storage)['state_dict'])
 
     predictor.freeze()
-    trainer.test(predictor, datamodule=dm.test_dataloader())
+    trainer.test(predictor, datamodule=dm)
 
     output = trainer.predict(predictor, dataloaders=dm.test_dataloader())
     output = casting.numpy(output)
