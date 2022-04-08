@@ -1,5 +1,6 @@
 
 import torch
+import numpy as np
 from torchmetrics.utilities.checks import _check_same_shape
 
 from tsl.nn.metrics.metric_base import MaskedMetric
