@@ -212,7 +212,7 @@ def run_experiment(args):
                                   tags=tags,
                                   params=vars(args),
                                   offline_mode=False,
-                                  upload_stdout=False)
+                                  upload_stdout=True)
     else:
         logger = TensorBoardLogger(
             save_dir=logdir,
