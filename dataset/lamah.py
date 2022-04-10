@@ -27,7 +27,8 @@ class LamaH(PandasDataset):
 
         # load dataset
         ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, ts_qobs_mask = self.load()
-        attribs_dict['dist'] = dists_mtx
+        # attribs_dict['dist'] = dists_mtx
+        attribs_dict = dict(dist=dists_mtx)
 
         super().__init__(dataframe=ts_qobs_df,
                          mask=ts_qobs_mask,
