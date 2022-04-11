@@ -129,7 +129,7 @@ def run_experiment(args):
     # data module                          #
     ########################################
 
-    edge_index = dataset.get_connectivity(method='distance',
+    edge_index = dataset.get_connectivity(method='stcn',
                                           layout='edge_index',
                                           include_self=False)
 
