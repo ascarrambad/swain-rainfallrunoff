@@ -48,7 +48,8 @@ def get_model_class(model_str):
     elif model_str == 'stcn':
         model = SWAIN_STCNModel
     elif model_str == 'gatedgn':
-        model = ''
+        # model = ''
+        raise NotImplementedError(f'Model "{model_str}" not available.')
     elif model_str == 'gwnet':
         model = SWAIN_GraphWaveNetModel
     else:
@@ -79,8 +80,7 @@ def add_parser_arguments(parent):
     parser.add_argument('--patience', type=int, default=50)
     parser.add_argument('--grad-clip-val', type=float, default=5.)
     parser.add_argument('--use-lr-schedule', type=str_to_bool, nargs='?', const=True, default=True)
-    parser.add_argument('--val-len', type=float, default=0.1)
-    parser.add_argument('--test-len', type=float, default=0.2)
+    parser.add_argument('--val-start', type=str, default='2000-10-1')
 
     # logging
     parser.add_argument('--save-preds', action='store_true', default=False)
@@ -150,8 +150,8 @@ def run_experiment(args):
         dataset=torch_dataset,
         scalers={'data': StandardScaler(axis=(0, 1)),
                  'u': StandardScaler(axis=(0, 1))},
-        splitter=dataset.get_splitter(val_len=args.val_len,
-                                      test_len=args.test_len),
+        splitter=dataset.get_splitter(method='at_datetime',
+                                      val_start=args.val_start),
         **dm_conf
     )
 

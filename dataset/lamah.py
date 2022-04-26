@@ -3,6 +3,7 @@ import pickle
 import tarfile
 from functools import reduce
 from collections import defaultdict
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,7 @@ from tsl.utils import download_url
 from tsl.utils.python_utils import files_exist
 from tsl.ops.similarities import gaussian_kernel
 from tsl.datasets.prototypes import PandasDataset
+from tsl.data.datamodule.splitters import AtTimeStepSplitter
 
 
 class LamaH(PandasDataset):
@@ -38,6 +40,7 @@ class LamaH(PandasDataset):
                          similarity_score="distance",
                          name="LamaH-CE")
 
+        self.test_start = datetime(2005,1,1)
     @property
     def raw_files_paths(self):
         return ['./data/2_LamaH-CE_daily.tar.gz']
@@ -238,16 +241,11 @@ class LamaH(PandasDataset):
 
         return datetime_feats
 
-    def splitter(self, dataset, val_len=0, test_len=0, window=0):
-        idx = np.arange(len(dataset))
-        if test_len < 1:
-            test_len = int(test_len * len(idx))
-        if val_len < 1:
-            val_len = int(val_len * (len(idx) - test_len))
-        test_start = len(idx) - test_len
-        val_start = test_start - val_len
-        return [idx[:val_start - window], idx[val_start:test_start - window],
-                idx[test_start:]]
+    def get_splitter(self, method=None, val_start=None):
+        if method == 'at_datetime' and val_start is not None:
+            val_start = tuple(map(int, val_start.split('-')))
+            return AtTimeStepSplitter(first_val_ts=val_start,
+                                      first_test_ts=self.test_start)
 
 
 if __name__ == '__main__':
