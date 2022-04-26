@@ -19,7 +19,7 @@ from tsl.data.datamodule.splitters import AtTimeStepSplitter
 class LamaH(PandasDataset):
     url = "https://zenodo.org/record/5153305/files/2_LamaH-CE_daily.tar.gz?download=1"
 
-    similarity_options = {'distance', 'stcn'}
+    similarity_options = {'distance', 'stcn', 'binary'}
     temporal_aggregation_options = None
     spatial_aggregation_options = None
 
@@ -28,9 +28,7 @@ class LamaH(PandasDataset):
         self.root = root
 
         # load dataset
-        ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, ts_qobs_mask = self.load()
-        # attribs_dict['dist'] = dists_mtx
-        attribs_dict = dict(dist=dists_mtx)
+        ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load()
 
         super().__init__(dataframe=ts_qobs_df,
                          mask=ts_qobs_mask,
@@ -40,7 +38,10 @@ class LamaH(PandasDataset):
                          similarity_score="distance",
                          name="LamaH-CE")
 
+        self.distance_connectivity = dists_mtx
+        self.binary_connectivity = binary_mtx
         self.test_start = datetime(2005,1,1)
+
     @property
     def raw_files_paths(self):
         return ['./data/2_LamaH-CE_daily.tar.gz']
@@ -50,7 +51,8 @@ class LamaH(PandasDataset):
         return ['LamaH-CE/lamah_qobs.csv',
                 'LamaH-CE/lamah_exos.pickle',
                 'LamaH-CE/lamah_attribs.pickle',
-                'LamaH-CE/lamah_dists.npy']
+                'LamaH-CE/lamah_dists.npy',
+                'LamaH-CE/lamah_hierarchy.npy']
 
     def download(self) -> None:
         download_url(self.url, self.root_dir)
@@ -126,21 +128,22 @@ class LamaH(PandasDataset):
         ts_qobs_df = ts_qobs_df.sort_index(axis=1)
         ts_exos_df = ts_exos_df.sort_index(axis=1, level='id')
 
-        # ts_exos_dict = {id: df.unstack('id') for id, df in ts_exos_df.to_dict('series').items()}
         ts_exos_dict = {'u': ts_exos_df}
 
-        # Build attributes data
-        # attrib_gauges_path = os.path.join(self.root_dir, 'LamaH-CE/D_gauges/1_attributes/Gauge_attributes.csv')
-        attrib_exos_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/1_attributes/Catchment_attributes.csv')
-
-        # attrib_gauges_df = pd.read_csv(attrib_gauges_path, sep=';').set_index('ID')
-        attrib_exos_df = pd.read_csv(attrib_exos_path, sep=';').iloc[:, :-1].set_index('ID')
-
-        attribs_dict = {'catchment': attrib_exos_df}
-
         # Build distances matrix
-        ids = list(ts_qobs_df.columns)
-        dists_mtx = self.build_distance_matrix(ids)
+        keep_ids = list(map(lambda x: int(x.split('.')[0][3:]), common_files))
+        keep_ids.sort()
+        dists_mtx = self.build_distance_matrix(keep_ids)
+        hierarchy_mtx, edge_attr = self.build_hierarchy_matrix(keep_ids)
+
+        # Build static attributes data
+        catch_attr_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/1_attributes/Catchment_attributes.csv')
+        catch_attr_df = pd.read_csv(catch_attr_path, sep=';').set_index('ID')
+        catch_attr_df = catch_attr_df.drop(columns=['hi_prec_ti', 'lo_prec_ti', 'gc_dom', 'NEXTDOWNID'])
+        catch_attr_df = catch_attr_df.filter(keep_ids, axis=0).sort_index(axis=0)
+
+        attribs_dict = {'catchment': catch_attr_df,
+                        'stream': edge_attr}
 
         # Store built data
         ts_qobs_df.to_csv(os.path.join(self.root_dir, 'LamaH-CE/lamah_qobs.csv'))
@@ -151,6 +154,7 @@ class LamaH(PandasDataset):
             pickle.dump(attribs_dict, file, protocol=pickle.HIGHEST_PROTOCOL)
 
         np.save(os.path.join(self.root_dir, 'LamaH-CE/lamah_dists.npy'), dists_mtx)
+        np.save(os.path.join(self.root_dir, 'LamaH-CE/lamah_hierarchy.npy'), hierarchy_mtx)
 
         # self.clean_downloads()
 
@@ -162,6 +166,7 @@ class LamaH(PandasDataset):
         exos_path = os.path.join(self.root_dir, 'LamaH-CE/lamah_exos.pickle')
         attribs_path = os.path.join(self.root_dir, 'LamaH-CE/lamah_attribs.pickle')
         dists_mtx_path = os.path.join(self.root_dir, 'LamaH-CE/lamah_dists.npy')
+        binary_mtx_path = os.path.join(self.root_dir, 'LamaH-CE/lamah_hierarchy.npy')
 
         # Load time-series data
         ts_qobs_df = pd.read_csv(gauges_path)
@@ -178,11 +183,12 @@ class LamaH(PandasDataset):
 
         # Load distance matrix
         dists_mtx = np.load(dists_mtx_path)
+        binary_mtx = np.load(binary_mtx_path)
 
-        return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx
+        return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
     def load(self):
-        ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx = self.load_raw()
+        ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load_raw()
 
         # Compute validity mask and fill NaNs
         ts_qobs_df = ts_qobs_df.replace({-999: np.NaN})
@@ -190,44 +196,64 @@ class LamaH(PandasDataset):
         ts_qobs_df = ts_qobs_df.fillna(value=0, axis=1)
         ts_exos_dict['u'].fillna(value=0, axis=1, inplace=True)
 
-        return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, ts_qobs_mask
+        return ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
+
+    ############################################################################
 
     def build_distance_matrix(self, ids):
         logger.info('Building distance matrix...')
+
         raw_dist_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/1_attributes/Stream_dist.csv')
-        distances = pd.read_csv(raw_dist_path, sep=';')
+        distance_df = pd.read_csv(raw_dist_path, sep=';').set_index('ID', drop=False)
+        distance_df = distance_df.filter(ids, axis=0).sort_index(axis=0)
         num_sensors = len(ids)
-        dist = np.ones((num_sensors, num_sensors), dtype=np.float32) * np.inf
+        distances = np.ones((num_sensors, num_sensors), dtype=np.float32) * np.inf
 
         # Builds sensor id to index map
         sensor_to_ind = {int(sensor_id): i for i, sensor_id in enumerate(ids)}
 
         # Fills cells in the matrix with distances
-        for row in distances.values:
-            dist[sensor_to_ind[row[0]], sensor_to_ind[row[1]]] = row[-1]
+        for row in distance_df.values:
+            distances[sensor_to_ind[row[0]], sensor_to_ind[row[1]]] = row[-1]
 
-        return dist
+        return distances
+
+    def build_hierarchy_matrix(self, ids):
+        logger.info('Building hierarchy matrix...')
+
+        gauge_hierarchy_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/1_attributes/Gauge_hierarchy.csv')
+        hierarchy_df = pd.read_csv(gauge_hierarchy_path, sep=';').set_index('ID', drop=False)
+        hierarchy_df = hierarchy_df.filter(ids, axis=0).sort_index(axis=0)
+        hierarchy_df = hierarchy_df[hierarchy_df.NEXTDOWNID != 0]
+        num_sensors = len(ids)
+        hierarchy = np.zeros((num_sensors, num_sensors), dtype=np.int)
+
+        # Builds sensor id to index map
+        sensor_to_ind = {int(sensor_id): i for i, sensor_id in enumerate(ids)}
+
+        # Fills cells in the matrix with distances
+        for row in hierarchy_df.values:
+            hierarchy[sensor_to_ind[row[0]], sensor_to_ind[row[-1]]] = 1
+
+        logger.info('Building edge features...')
+        edge_attr_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/1_attributes/Stream_dist.csv')
+        edge_attr_df = pd.read_csv(edge_attr_path, sep=';').drop(columns=['ID','NEXTDOWNID'])
+        edge_attr = edge_attr_df.to_numpy()
+
+        return hierarchy, edge_attr
+
 
     def compute_similarity(self, method: str, **kwargs):
         if method == 'distance':
-            finite_dist = self.dist.reshape(-1)
+            finite_dist = self.distance_connectivity.reshape(-1)
             finite_dist = finite_dist[~np.isinf(finite_dist)]
             sigma = finite_dist.std()
-            return gaussian_kernel(self.dist, sigma)
+            return gaussian_kernel(self.distance_connectivity, sigma)
         elif method == 'stcn':
             sigma = 10
-            return gaussian_kernel(self.dist, sigma)
-
-    # Old methods, still to be checked
-
-    # def get_datetime_dummies(self):
-    #     df = self.dataframe()
-    #     df['day'] = df.index.weekday
-    #     df['hour'] = df.index.hour
-    #     df['minute'] = df.index.minute
-    #     dummies = pd.get_dummies(df[['day', 'hour', 'minute']],
-    #                              columns=['day', 'hour', 'minute'])
-    #     return dummies.values
+            return gaussian_kernel(self.distance_connectivity, sigma)
+        elif method == 'binary':
+            return self.binary_connectivity
 
     def get_datetime_features(self, df):
         day = 24 * 60 * 60
