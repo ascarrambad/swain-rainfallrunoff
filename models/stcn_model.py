@@ -2,7 +2,7 @@
 from torch import nn
 
 from tsl.nn.blocks.encoders import ConditionalBlock
-from tsl.nn.blocks.encoders.stcn import SpatioTemporalConvNet
+from .blocks.stcn_block import SWAIN_SpatioTemporalConvNet
 
 from tsl.nn.blocks.decoders.multi_step_mlp_decoder import MultiHorizonMLPDecoder
 
@@ -55,7 +55,7 @@ class SWAIN_STCNModel(STCNModel):
         conv_blocks = []
         for _ in range(n_layers):
             conv_blocks.append(
-                SpatioTemporalConvNet(
+                SWAIN_SpatioTemporalConvNet(
                     input_size=hidden_size,
                     output_size=hidden_size,
                     temporal_kernel_size=temporal_kernel_size,
@@ -81,11 +81,11 @@ class SWAIN_STCNModel(STCNModel):
                                               activation=activation,
                                               dropout=dropout)
 
-    def forward(self, x, u_w, u_h, edge_index, edge_weight=None, **kwargs):
+    def forward(self, x, u_w, u_h, edge_index, node_attr=None, edge_attr=None, edge_weight=None, **kwargs):
         # x: [batches, steps, nodes, channels] -> [batches, steps, nodes, channels]
         x = self.input_encoder(x, u_w)
 
         for conv in self.convs:
-            x = x + conv(x, edge_index, edge_weight)
+            x = x + conv(x, edge_index, edge_attr)
 
         return self.readout(x, u_h)

@@ -129,17 +129,33 @@ def run_experiment(args):
     # data module                          #
     ########################################
 
-    edge_index = dataset.get_connectivity(method='stcn',
+    edge_index = dataset.get_connectivity(method='binary',
                                           layout='edge_index',
                                           include_self=False)
 
+    edge_attr = torch.from_numpy(dataset.stream).float()
+    edge_scaler = StandardScaler(axis=0)
+    edge_attr = edge_scaler.fit_transform(edge_attr)
+
+    node_attr = dataset.catchment
+    node_scaler = StandardScaler(axis=0)
+    node_attr = node_scaler.fit_transform(node_attr)
+
+    #############
+
     torch_dataset = SpatioTemporalDataset(*dataset.numpy(return_idx=True),
-                                          connectivity=edge_index,
+                                          exogenous=dataset.exogenous,
                                           mask=dataset.mask,
+                                          connectivity=edge_index,
                                           horizon=args.horizon,
                                           window=args.window,
-                                          stride=args.stride,
-                                          exogenous=dataset.exogenous)
+                                          stride=args.stride)
+    torch_dataset.add_attribute(name='node_attr',
+                                value=node_attr,
+                                node_level=True,
+                                add_to_batch=True)
+
+    torch_dataset.edge_attr = edge_attr
 
     torch_dataset.set_input_map(x=(['data'], WINDOW),
                                 u_w=(['u'], WINDOW),
