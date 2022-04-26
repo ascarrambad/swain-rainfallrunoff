@@ -1,15 +1,13 @@
 
 from torch import nn
 
+from tsl.utils.parser_utils import ArgParser, str_to_bool
 from tsl.nn.blocks.encoders import ConditionalBlock
-from .blocks.stcn_block import SWAIN_SpatioTemporalConvNet
-
+from .blocks.gat_block import SWAIN_SpatioTemporalConvNet
 from tsl.nn.blocks.decoders.multi_step_mlp_decoder import MultiHorizonMLPDecoder
 
-from tsl.nn.models.stgn import STCNModel
 
-
-class SWAIN_STCNModel(STCNModel):
+class SWAIN_GATModel(nn.Module):
     r"""
         Spatiotemporal GNN with interleaved temporal and spatial diffusion convolutions.
         Args:
@@ -21,7 +19,7 @@ class SWAIN_STCNModel(STCNModel):
             n_layers (int): Number of GraphWaveNet blocks.
             horizon (int): Forecasting horizon.
             temporal_kernel_size (int): Size of the temporal convolution kernel.
-            spatial_kernel_size (int): Order of the spatial diffusion process.
+            spatial_attention_heads (int): Number of heads to perform attention with.
             dilation (int, optional): Dilation of the temporal convolutional kernels.
             norm (str, optional): Normalization strategy.
             gated (bool, optional): Whether to use gated TanH activation in the temporal convolutional layers.
@@ -31,13 +29,14 @@ class SWAIN_STCNModel(STCNModel):
     def __init__(self,
                  input_size,
                  exog_size,
-                 hidden_size,
-                 ff_size,
+                 model_hidden_size,
+                 decoder_hidden_size,
+                 decoder_context_size,
                  output_size,
                  n_layers,
                  horizon,
                  temporal_kernel_size,
-                 spatial_kernel_size,
+                 spatial_attention_heads,
                  temporal_convs_layer=2,
                  spatial_convs_layer=1,
                  dilation=1,
@@ -45,21 +44,21 @@ class SWAIN_STCNModel(STCNModel):
                  gated=False,
                  activation='relu',
                  dropout=0.):
-        super(STCNModel, self).__init__()
+        super(SWAIN_GATModel, self).__init__()
 
         self.input_encoder = ConditionalBlock(input_size=input_size,
                                               exog_size=exog_size,
-                                              output_size=hidden_size,
+                                              output_size=model_hidden_size,
                                               activation=activation)
 
         conv_blocks = []
         for _ in range(n_layers):
             conv_blocks.append(
                 SWAIN_SpatioTemporalConvNet(
-                    input_size=hidden_size,
-                    output_size=hidden_size,
+                    input_size=model_hidden_size,
+                    output_size=model_hidden_size,
                     temporal_kernel_size=temporal_kernel_size,
-                    spatial_kernel_size=spatial_kernel_size,
+                    spatial_attention_heads=spatial_attention_heads,
                     temporal_convs=temporal_convs_layer,
                     spatial_convs=spatial_convs_layer,
                     dilation=dilation,
@@ -71,10 +70,10 @@ class SWAIN_STCNModel(STCNModel):
             )
         self.convs = nn.ModuleList(conv_blocks)
 
-        self.readout = MultiHorizonMLPDecoder(input_size=hidden_size,
+        self.readout = MultiHorizonMLPDecoder(input_size=model_hidden_size,
                                               exog_size=exog_size,
-                                              hidden_size=ff_size,
-                                              context_size=hidden_size,
+                                              hidden_size=decoder_hidden_size,
+                                              context_size=decoder_context_size,
                                               output_size=output_size,
                                               n_layers=n_layers,
                                               horizon=horizon,
@@ -89,3 +88,17 @@ class SWAIN_STCNModel(STCNModel):
             x = x + conv(x, edge_index, edge_attr)
 
         return self.readout(x, u_h)
+
+    @staticmethod
+    def add_model_specific_args(parser: ArgParser):
+        parser.opt_list('--model-hidden-size', type=int, default=32, tunable=True, options=[16, 32, 64, 128])
+        parser.opt_list('--decoder-hidden-size', type=int, default=256, tunable=True, options=[64, 128, 256, 512])
+        parser.opt_list('--decoder-context-size', type=int, default=256, tunable=True, options=[16, 32, 64, 128])
+        parser.opt_list('--n-layers', type=int, default=1, tunable=True, options=[1, 2])
+        parser.opt_list('--dropout', type=float, default=0., tunable=True, options=[0., 0.1, 0.25, 0.5])
+        parser.opt_list('--temporal-kernel-size', type=int, default=2, tunable=True, options=[2, 3, 5])
+        parser.opt_list('--spatial-attention-heads', type=int, default=1, tunable=True, options=[1, 3, 5])
+        parser.opt_list('--dilation', type=int, default=2, tunable=True, options=[1, 2])
+        parser.opt_list('--norm', type=str, default='none', tunable=True, options=['none', 'layer', 'batch'])
+        parser.opt_list('--gated', type=str_to_bool, tunable=False, nargs='?', const=True, default=False, options=[True, False])
+        return parser

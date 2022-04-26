@@ -34,7 +34,7 @@ import datetime
 import yaml
 
 from models.dcrnn_model import SWAIN_DCRNNModel
-from models.stcn_model import SWAIN_STCNModel
+from models.gat_model import SWAIN_GATModel
 from models.grawave_model import SWAIN_GraphWaveNetModel
 
 from dataset.lamah import LamaH
@@ -45,8 +45,8 @@ import tsl_config
 def get_model_class(model_str):
     if model_str == 'dcrnn':
         model = SWAIN_DCRNNModel
-    elif model_str == 'stcn':
-        model = SWAIN_STCNModel
+    elif model_str == 'gat':
+        model = SWAIN_GATModel
     elif model_str == 'gatedgn':
         # model = ''
         raise NotImplementedError(f'Model "{model_str}" not available.')

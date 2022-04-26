@@ -31,7 +31,7 @@ class SWAIN_SpatioTemporalConvNet(nn.Module):
                  input_size,
                  output_size,
                  temporal_kernel_size,
-                 spatial_kernel_size,
+                 spatial_attention_heads,
                  temporal_convs=2,
                  spatial_convs=1,
                  dilation=1,
@@ -62,7 +62,7 @@ class SWAIN_SpatioTemporalConvNet(nn.Module):
 
         self.spatial_convs = nn.ModuleList(GATConv(in_channels=output_size,
                                                    out_channels=output_size,
-                                                   heads=spatial_kernel_size,
+                                                   heads=spatial_attention_heads,
                                                    concat=True,
                                                    dropout=dropout,
                                                    add_self_loops=False,
