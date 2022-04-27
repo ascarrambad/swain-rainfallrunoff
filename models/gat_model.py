@@ -46,10 +46,15 @@ class SWAIN_GATModel(nn.Module):
                  dropout=0.):
         super(SWAIN_GATModel, self).__init__()
 
-        self.input_encoder = ConditionalBlock(input_size=input_size,
-                                              exog_size=exog_size,
-                                              output_size=model_hidden_size,
-                                              activation=activation)
+        self.node_cond = ConditionalBlock(input_size=input_size,
+                                          exog_size=59,
+                                          output_size=model_hidden_size,
+                                          activation=activation)
+
+        self.exog_cond = ConditionalBlock(input_size=model_hidden_size,
+                                          exog_size=exog_size,
+                                          output_size=model_hidden_size,
+                                          activation=activation)
 
         conv_blocks = []
         for _ in range(n_layers):
@@ -82,7 +87,8 @@ class SWAIN_GATModel(nn.Module):
 
     def forward(self, x, u_w, u_h, edge_index, node_attr=None, edge_attr=None, edge_weight=None, **kwargs):
         # x: [batches, steps, nodes, channels] -> [batches, steps, nodes, channels]
-        x = self.input_encoder(x, u_w)
+        x = self.node_cond(x, node_attr)
+        x = self.exog_cond(x, u_w)
 
         for conv in self.convs:
             x = x + conv(x, edge_index, edge_attr)
