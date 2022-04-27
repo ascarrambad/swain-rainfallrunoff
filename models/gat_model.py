@@ -27,6 +27,7 @@ class SWAIN_GATModel(nn.Module):
             dropout (float, optional): Dropout probability.
         """
     def __init__(self,
+                 use_node_attribs,
                  input_size,
                  exog_size,
                  model_hidden_size,
@@ -46,12 +47,19 @@ class SWAIN_GATModel(nn.Module):
                  dropout=0.):
         super(SWAIN_GATModel, self).__init__()
 
-        self.node_cond = ConditionalBlock(input_size=input_size,
-                                          exog_size=59,
-                                          output_size=model_hidden_size,
-                                          activation=activation)
+        self.use_node_attribs = use_node_attribs
 
-        self.exog_cond = ConditionalBlock(input_size=model_hidden_size,
+        if use_node_attribs == 'cond':
+            self.node_cond = ConditionalBlock(input_size=input_size,
+                                              exog_size=59,
+                                              output_size=model_hidden_size,
+                                              activation=activation)
+        # elif use_node_attribs == 'ea':
+        elif use_node_attribs != 'none':
+            raise NotImplementedError(f'Usage "{use_node_attribs}" for node features not available.')
+
+
+        self.exog_cond = ConditionalBlock(input_size=model_hidden_size if use_node_attribs != 'none' else input_size,
                                           exog_size=exog_size,
                                           output_size=model_hidden_size,
                                           activation=activation)
@@ -87,7 +95,8 @@ class SWAIN_GATModel(nn.Module):
 
     def forward(self, x, u_w, u_h, edge_index, node_attr=None, edge_attr=None, edge_weight=None, **kwargs):
         # x: [batches, steps, nodes, channels] -> [batches, steps, nodes, channels]
-        x = self.node_cond(x, node_attr)
+        if self.use_node_attribs == 'cond':
+            x = self.node_cond(x, node_attr)
         x = self.exog_cond(x, u_w)
 
         for conv in self.convs:
@@ -97,6 +106,7 @@ class SWAIN_GATModel(nn.Module):
 
     @staticmethod
     def add_model_specific_args(parser: ArgParser):
+        parser.opt_list('--use-node-attribs', type=str, default='none', tunable=True, options=['none', 'cond', 'ea'])
         parser.opt_list('--model-hidden-size', type=int, default=32, tunable=True, options=[16, 32, 64, 128])
         parser.opt_list('--decoder-hidden-size', type=int, default=256, tunable=True, options=[64, 128, 256, 512])
         parser.opt_list('--decoder-context-size', type=int, default=256, tunable=True, options=[16, 32, 64, 128])

@@ -149,10 +149,11 @@ def run_experiment(args):
                                           horizon=args.horizon,
                                           window=args.window,
                                           stride=args.stride)
-    torch_dataset.add_attribute(name='node_attr',
-                                value=node_attr,
-                                node_level=True,
-                                add_to_batch=True)
+    if args.use_node_attribs != 'none':
+        torch_dataset.add_attribute(name='node_attr',
+                                    value=node_attr,
+                                    node_level=True,
+                                    add_to_batch=True)
 
     torch_dataset.edge_attr = edge_attr
 
