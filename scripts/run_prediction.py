@@ -12,7 +12,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from tsl.data import SpatioTemporalDataset, SpatioTemporalDataModule
-from tsl.data.preprocessing import StandardScaler
+from tsl.data.preprocessing import StandardScaler, MinMaxScaler
 from tsl.data.utils import WINDOW, HORIZON
 from tsl.nn.utils import casting
 from tsl.predictors import Predictor
@@ -48,7 +48,6 @@ def get_model_class(model_str):
     elif model_str == 'gat':
         model = SWAIN_GATModel
     elif model_str == 'gatedgn':
-        # model = ''
         raise NotImplementedError(f'Model "{model_str}" not available.')
     elif model_str == 'gwnet':
         model = SWAIN_GraphWaveNetModel

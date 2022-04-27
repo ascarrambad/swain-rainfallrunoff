@@ -35,7 +35,7 @@ class LamaH(PandasDataset):
                          exogenous=ts_exos_dict,
                          attributes=attribs_dict,
                          freq=freq,
-                         similarity_score="distance",
+                         similarity_score="binary",
                          name="LamaH-CE")
 
         self.distance_connectivity = dists_mtx
@@ -131,8 +131,7 @@ class LamaH(PandasDataset):
         ts_exos_dict = {'u': ts_exos_df}
 
         # Build distances matrix
-        keep_ids = list(map(lambda x: int(x.split('.')[0][3:]), common_files))
-        keep_ids.sort()
+        keep_ids = list(ts_qobs_df.columns)
         dists_mtx = self.build_distance_matrix(keep_ids)
         hierarchy_mtx, edge_attr = self.build_hierarchy_matrix(keep_ids)
 
@@ -142,7 +141,7 @@ class LamaH(PandasDataset):
         catch_attr_df = catch_attr_df.drop(columns=['hi_prec_ti', 'lo_prec_ti', 'gc_dom', 'NEXTDOWNID'])
         catch_attr_df = catch_attr_df.filter(keep_ids, axis=0).sort_index(axis=0)
 
-        attribs_dict = {'catchment': catch_attr_df,
+        attribs_dict = {'catchment': catch_attr_df.to_numpy(),
                         'stream': edge_attr}
 
         # Store built data
@@ -195,6 +194,7 @@ class LamaH(PandasDataset):
         ts_qobs_mask = ~np.isnan(ts_qobs_df.values)
         ts_qobs_df = ts_qobs_df.fillna(value=0, axis=1)
         ts_exos_dict['u'].fillna(value=0, axis=1, inplace=True)
+        attribs_dict['catchment'] = np.nan_to_num(attribs_dict['catchment'])
 
         return ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
