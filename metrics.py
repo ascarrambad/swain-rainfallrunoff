@@ -7,8 +7,13 @@ from tsl.nn.metrics.metric_base import MaskedMetric
 
 
 def _nse(y_hat, y):
-    denominator = ((y - y.mean())**2).sum()
-    numerator = ((y_hat - y)**2).sum()
+    # sum over all catchments
+    y = y.nansum(2)
+    y_hat = y_hat.nansum(2)
+
+    # nse
+    denominator = ((y - y.nanmean(1))**2).nansum(1).nan_to_num()
+    numerator = ((y_hat - y)**2).nansum(1).nan_to_num()
 
     return 1 - numerator / denominator
 
@@ -47,8 +52,8 @@ class MaskedNSE(MaskedMetric):
     def _compute_masked(self, y_hat, y, mask):
         _check_same_shape(y_hat, y)
         mask = self._check_mask(mask, y)
-        y_hat = torch.where(mask, y_hat, torch.zeros_like(y_hat))
-        y = torch.where(mask, y, torch.zeros_like(y))
+        y_hat = torch.where(mask, y_hat, torch.full_like(y_hat, np.nan))
+        y = torch.where(mask, y, torch.full_like(y, np.nan))
         val = self.metric_fn(y_hat, y)
         return val.sum(), mask.sum()
 
