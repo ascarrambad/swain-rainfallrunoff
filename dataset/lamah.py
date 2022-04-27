@@ -7,11 +7,13 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import networkx as nx
 
 from tsl import logger
 from tsl.utils import download_url
 from tsl.utils.python_utils import files_exist
 from tsl.ops.similarities import gaussian_kernel
+from tsl.ops.connectivity import adj_to_edge_index
 from tsl.datasets.prototypes import PandasDataset
 from tsl.data.datamodule.splitters import AtTimeStepSplitter
 
@@ -23,12 +25,12 @@ class LamaH(PandasDataset):
     temporal_aggregation_options = None
     spatial_aggregation_options = None
 
-    def __init__(self, root='./data/', freq='1D'):
+    def __init__(self, discard_disconnected_components=True, root='./data/', freq='1D'):
         # Set root path
         self.root = root
 
         # load dataset
-        ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load()
+        ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load(discard_disconnected_components)
 
         super().__init__(dataframe=ts_qobs_df,
                          mask=ts_qobs_mask,
@@ -186,8 +188,15 @@ class LamaH(PandasDataset):
 
         return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
-    def load(self):
+    def load(self, discard_disconnected_components):
         ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load_raw()
+
+        if discard_disconnected_components:
+            ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self._discard_disconnected_components(ts_qobs_df,
+                                                                                                                  ts_exos_dict,
+                                                                                                                  attribs_dict,
+                                                                                                                  dists_mtx,
+                                                                                                                  binary_mtx)
 
         # Compute validity mask and fill NaNs
         ts_qobs_df = ts_qobs_df.replace({-999: np.NaN})
@@ -241,6 +250,30 @@ class LamaH(PandasDataset):
         edge_attr = edge_attr_df.to_numpy()
 
         return hierarchy, edge_attr
+
+    def _discard_disconnected_components(self, ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx):
+        ind_to_sensor = {i: int(sensor_id) for i, sensor_id in enumerate(ts_qobs_df.columns)}
+        nodes_idxs = list(range(len(ts_qobs_df.columns)))
+        edge_index, _ = adj_to_edge_index(binary_mtx)
+
+        g = nx.Graph()
+        g.add_nodes_from(nodes_idxs)
+        g.add_edges_from(edge_index.T)
+
+        comps = list(nx.connected_components(g))
+        main_comp_idx = np.argmax([len(c) for c in comps])
+        del comps[main_comp_idx]
+        secondary_nodes_idxs = list(set.union(*comps))
+        secondary_nodes = [ind_to_sensor[idx] for idx in secondary_nodes_idxs]
+
+        ts_qobs_df.drop(columns=secondary_nodes, inplace=True)
+        ts_exos_dict['u'].drop(columns=secondary_nodes, level='id', inplace=True)
+
+        attribs_dict = {k: np.delete(attribs_dict[k], secondary_nodes_idxs, axis=0) for k, v in attribs_dict.items()}
+        dists_mtx = np.delete(np.delete(dists_mtx, secondary_nodes_idxs, axis=0), secondary_nodes_idxs, axis=1)
+        binary_mtx = np.delete(np.delete(binary_mtx, secondary_nodes_idxs, axis=0), secondary_nodes_idxs, axis=1)
+
+        return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
 
     def compute_similarity(self, method: str, **kwargs):
