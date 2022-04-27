@@ -135,7 +135,7 @@ class LamaH(PandasDataset):
         # Build distances matrix
         keep_ids = list(ts_qobs_df.columns)
         dists_mtx = self.build_distance_matrix(keep_ids)
-        hierarchy_mtx, edge_attr = self.build_hierarchy_matrix(keep_ids)
+        hierarchy_mtx, edge_attr_df = self.build_hierarchy_matrix(keep_ids)
 
         # Build static attributes data
         catch_attr_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/1_attributes/Catchment_attributes.csv')
@@ -143,8 +143,8 @@ class LamaH(PandasDataset):
         catch_attr_df = catch_attr_df.drop(columns=['hi_prec_ti', 'lo_prec_ti', 'gc_dom', 'NEXTDOWNID'])
         catch_attr_df = catch_attr_df.filter(keep_ids, axis=0).sort_index(axis=0)
 
-        attribs_dict = {'catchment': catch_attr_df.to_numpy(),
-                        'stream': edge_attr}
+        attribs_dict = {'catchment': catch_attr_df,
+                        'stream': edge_attr_df}
 
         # Store built data
         ts_qobs_df.to_csv(os.path.join(self.root_dir, 'LamaH-CE/lamah_qobs.csv'))
@@ -189,14 +189,14 @@ class LamaH(PandasDataset):
         return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
     def load(self, discard_disconnected_components):
-        ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load_raw()
-
+        data = self.load_raw()
         if discard_disconnected_components:
-            ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self._discard_disconnected_components(ts_qobs_df,
-                                                                                                                  ts_exos_dict,
-                                                                                                                  attribs_dict,
-                                                                                                                  dists_mtx,
-                                                                                                                  binary_mtx)
+            data = self._discard_disconnected_components(*data)
+
+        ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = data
+
+        # Transform eventual pd.DataFrames into ndarrays
+        attribs_dict.update({k: df.to_numpy() for k, df in attribs_dict.items() if isinstance(df, pd.DataFrame)})
 
         # Compute validity mask and fill NaNs
         ts_qobs_df = ts_qobs_df.replace({-999: np.NaN})
@@ -246,10 +246,9 @@ class LamaH(PandasDataset):
 
         logger.info('Building edge features...')
         edge_attr_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/1_attributes/Stream_dist.csv')
-        edge_attr_df = pd.read_csv(edge_attr_path, sep=';').drop(columns=['ID','NEXTDOWNID'])
-        edge_attr = edge_attr_df.to_numpy()
+        edge_attr_df = pd.read_csv(edge_attr_path, sep=';').set_index('ID').drop(columns=['NEXTDOWNID'])
 
-        return hierarchy, edge_attr
+        return hierarchy, edge_attr_df
 
     def _discard_disconnected_components(self, ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx):
         ind_to_sensor = {i: int(sensor_id) for i, sensor_id in enumerate(ts_qobs_df.columns)}
@@ -269,7 +268,7 @@ class LamaH(PandasDataset):
         ts_qobs_df.drop(columns=secondary_nodes, inplace=True)
         ts_exos_dict['u'].drop(columns=secondary_nodes, level='id', inplace=True)
 
-        attribs_dict = {k: np.delete(attribs_dict[k], secondary_nodes_idxs, axis=0) for k, v in attribs_dict.items()}
+        attribs_dict = {k: df.drop(index=secondary_nodes, errors='ignore') for k, df in attribs_dict.items()}
         dists_mtx = np.delete(np.delete(dists_mtx, secondary_nodes_idxs, axis=0), secondary_nodes_idxs, axis=1)
         binary_mtx = np.delete(np.delete(binary_mtx, secondary_nodes_idxs, axis=0), secondary_nodes_idxs, axis=1)
 
