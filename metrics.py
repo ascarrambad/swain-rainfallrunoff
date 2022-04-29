@@ -12,8 +12,8 @@ def _nse(y_hat, y):
     y_hat = y_hat.nansum(2)
 
     # nse
+    numerator = ((y - y_hat)**2).nansum(1).nan_to_num()
     denominator = ((y - y.nanmean(1))**2).nansum(1).nan_to_num()
-    numerator = ((y_hat - y)**2).nansum(1).nan_to_num()
 
     return 1 - numerator / denominator
 
