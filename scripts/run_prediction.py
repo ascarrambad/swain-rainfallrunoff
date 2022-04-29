@@ -133,11 +133,11 @@ def run_experiment(args):
                                           include_self=False)
 
     edge_attr = torch.from_numpy(dataset.stream).float()
-    edge_scaler = StandardScaler(axis=0)
+    edge_scaler = MinMaxScaler(axis=0)
     edge_attr = edge_scaler.fit_transform(edge_attr)
 
     node_attr = dataset.catchment
-    node_scaler = StandardScaler(axis=0)
+    node_scaler = MinMaxScaler(axis=0)
     node_attr = node_scaler.fit_transform(node_attr)
 
     #############
@@ -164,8 +164,8 @@ def run_experiment(args):
     dm_conf = parser_utils.filter_args(args, SpatioTemporalDataModule, return_dict=True)
     dm = SpatioTemporalDataModule(
         dataset=torch_dataset,
-        scalers={'data': StandardScaler(axis=(0, 1)),
-                 'u': StandardScaler(axis=(0, 1))},
+        scalers={'data': MinMaxScaler(axis=(0, 1)),
+                 'u': MinMaxScaler(axis=(0, 1))},
         splitter=dataset.get_splitter(method='at_datetime',
                                       val_start=args.val_start),
         **dm_conf
