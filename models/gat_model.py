@@ -83,19 +83,15 @@ class SWAIN_GATModel(nn.Module):
             )
         self.convs = nn.ModuleList(conv_blocks)
 
-        # self.readout = MultiHorizonMLPDecoder(input_size=model_hidden_size,
-        #                                       exog_size=exog_size,
-        #                                       hidden_size=decoder_hidden_size,
-        #                                       context_size=decoder_context_size,
-        #                                       output_size=output_size,
-        #                                       n_layers=n_layers,
-        #                                       horizon=horizon,
-        #                                       activation=activation,
-        #                                       dropout=dropout)
-        self.readout = ConditionalBlock(input_size=model_hidden_size,
-                                        exog_size=exog_size,
-                                        output_size=output_size,
-                                        activation=activation)
+        self.readout = MultiHorizonMLPDecoder(input_size=model_hidden_size,
+                                              exog_size=exog_size,
+                                              hidden_size=decoder_hidden_size,
+                                              context_size=decoder_context_size,
+                                              output_size=output_size,
+                                              n_layers=n_layers,
+                                              horizon=horizon,
+                                              activation=activation,
+                                              dropout=dropout)
 
     def forward(self, x, u_w, u_h, edge_index, node_attr=None, edge_attr=None, edge_weight=None, **kwargs):
         # x: [batches, steps, nodes, channels] -> [batches, steps, nodes, channels]
@@ -106,7 +102,7 @@ class SWAIN_GATModel(nn.Module):
         for conv in self.convs:
             x = x + conv(x, edge_index, edge_attr)
 
-        return self.readout(x[:,-1:], u_h)
+        return self.readout(x, u_h)
 
     @staticmethod
     def add_model_specific_args(parser: ArgParser):
