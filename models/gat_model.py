@@ -106,7 +106,7 @@ class SWAIN_GATModel(nn.Module):
         for conv in self.convs:
             x = x + conv(x, edge_index, edge_attr)
 
-        return self.readout(x, u_h)
+        return self.readout(x[:,-1:], u_h)
 
     @staticmethod
     def add_model_specific_args(parser: ArgParser):
