@@ -36,7 +36,7 @@ source = ColumnDataSource(data=dict(date=[],
                                     y_hat=[],
                                     y_true=[],
                                     residuals=[],
-                                    cum_resids=[]))
+                                    meanc_resids=[]))
 tools = 'pan,wheel_zoom,box_zoom,save,reset'
 
 # Figures setup
@@ -50,7 +50,7 @@ ts2.line('date', 'residuals', source=source, color='red', legend_label='Residual
 
 ts3 = figure(width=1300, height=300, tools=tools, x_axis_type='datetime')
 ts3.x_range = ts1.x_range
-ts3.line('date', 'cum_resids', source=source, color='red', legend_label='Cumulative residuals')
+ts3.line('date', 'meanc_resids', source=source, color='red', legend_label='Mean-centered Residuals')
 
 # Widgets setup
 ticker_label = PreText(text='Select catchment ID: ')
@@ -78,13 +78,13 @@ def get_data(ticker_opt):
                              y_hat=y_hat,
                              y_true=y_true,
                              residuals=y_true - y_hat,
-                             cum_resids=np.cumsum(np.abs(y_true - y_hat))))
+                             meanc_resids=(y_true - y_hat) - np.nanmean(y_true - y_hat)))
 
 # Callbacks
 def update_stats(df):
     stats1.text = str(df[['y_hat', 'y_true']].describe())
     stats2.text = str(df[['residuals']].describe())
-    stats3.text = str(df[['cum_resids']].describe())
+    stats3.text = str(df[['meanc_resids']].describe())
 
 def update(selected=None):
     df = get_data(ticker.value)
@@ -106,9 +106,9 @@ ticker.on_change('value', ticker_change)
 widgets = row(ticker_label, ticker)
 preds = row(ts1, stats1)
 resids = row(ts2, stats2)
-cum_resids = row(ts3, stats3)
+meanc_resids = row(ts3, stats3)
 
-layout = column(widgets, preds, resids, cum_resids)
+layout = column(widgets, preds, resids, meanc_resids)
 
 # Generate plot
 update()
