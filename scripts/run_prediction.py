@@ -37,7 +37,7 @@ from models.gat_model import SWAIN_GATModel
 from models.grawave_model import SWAIN_GraphWaveNetModel
 
 from dataset.lamah import LamaH
-from utils.plotter import SWAIN_Plotter
+from utils.plotter import SWAIN_Plotter, masked_nse
 
 import tsl_config
 
@@ -64,23 +64,33 @@ def get_dataset(dataset_name):
 
 
 def add_parser_arguments(parent):
-    # Argument parser
+    ## Argument parser
     parser = ArgParser(strategy='random_search', parents=[parent], add_help=False)
 
+    # Config
     parser.add_argument('--seed', type=int, default=-1)
     parser.add_argument("--model-name", type=str, default='dcrnn')
     parser.add_argument("--dataset-name", type=str, default='lamah')
     parser.add_argument("--config", type=str, default='dcrnn.yaml')
-    # training
-    parser.add_argument('--lr', type=float, default=0.001)
+
+    # Data
+    parser.add_argument("--per-node-scaling", type=bool, default=False)
+    parser.add_argument("--scaler-class", type=bool, default=False)
+
+    # Training
     parser.add_argument('--l2-reg', type=float, default=0.),
+
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--patience', type=int, default=50)
-    parser.add_argument('--grad-clip-val', type=float, default=5.)
+    parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--use-lr-schedule', type=str_to_bool, nargs='?', const=True, default=True)
+
+    parser.add_argument('--scaled-targets', type=bool, default=True)
+
+    parser.add_argument('--grad-clip-val', type=float, default=5.)
     parser.add_argument('--val-start', type=str, default='2000-10-1')
 
-    # logging
+    # Logging
     parser.add_argument('--save-preds', action='store_true', default=False)
     parser.add_argument('--neptune-logger', action='store_true', default=False)
     parser.add_argument('--project-name', type=str, default="swain")
@@ -163,8 +173,8 @@ def run_experiment(args):
     dm_conf = parser_utils.filter_args(args, SpatioTemporalDataModule, return_dict=True)
     dm = SpatioTemporalDataModule(
         dataset=torch_dataset,
-        scalers={'data': StandardScaler(axis=(0, 1)),
-                 'u': StandardScaler(axis=(0, 1))},
+        scalers={'data': StandardScaler(axis=0 if args.per_node_scaling else (0, 1)), #[steps, nodes, channels]
+                 'u': StandardScaler(axis=0 if args.per_node_scaling else (0, 1))},
         splitter=dataset.get_splitter(method='at_datetime',
                                       val_start=args.val_start),
         **dm_conf
@@ -205,7 +215,7 @@ def run_experiment(args):
             'eta_min': 0.0001,
             'T_max': args.epochs
         },
-        scale_target=True
+        scale_target=args.scaled_targets
     )
 
     ########################################
@@ -263,12 +273,12 @@ def run_experiment(args):
     ########################################
 
     # Retrieve best weights and freeze model
-    # predictor.load_state_dict(torch.load(checkpoint_callback.best_model_path,
-    #                                      lambda storage, loc: storage)['state_dict'])
+    predictor.load_state_dict(torch.load(checkpoint_callback.best_model_path,
+                                         lambda storage, loc: storage)['state_dict'])
 
     predictor.freeze()
 
-    # Plotter here
+    # Plot out results
     gauge_attribs, node_idx_map = dataset.load_plotting_data()
     plotter = SWAIN_Plotter(edge_index=edge_idxs_ws[0],
                             node_attribs=gauge_attribs,
@@ -280,13 +290,38 @@ def run_experiment(args):
                             datamodule=dm,
                             log_dir=log_dir)
 
-    plotter.prepare(splits=['test'])
-    plotter.generate_metrics_map(split='test')
+    splits = ['train', 'val', 'test']
+    plotter.prepare(splits=splits)
+    plotter.generate_metrics_map(split=splits)
     plotter.dump()
+
+    # Log on neptune
+    trainer.test(predictor, datamodule=dm)
+
+    val_out = plotter.pred_out['val']['y_hat'], \
+               plotter.pred_out['val']['y'], \
+               plotter.pred_out['val']['mask']
+
+    test_out = plotter.pred_out['test']['y_hat'], \
+               plotter.pred_out['test']['y'], \
+               plotter.pred_out['test']['mask']
+
+    res = dict(val_nse=masked_nse(*val_out),
+               val_mae=numpy_metrics.masked_mae(*val_out),
+               val_rmse=numpy_metrics.masked_rmse(*val_out),
+               val_mape=numpy_metrics.masked_mape(*val_out)))
+    res.update(dict(test_nse=masked_nse(*test_out),
+                    test_mae=numpy_metrics.masked_mae(*test_out),
+                    test_rmse=numpy_metrics.masked_rmse(*test_out),
+                    test_mape=numpy_metrics.masked_mape(*test_out)))
+
+    output = trainer.predict(predictor, dataloaders=dm.val_dataloader())
+    output = casting.numpy(output)
 
     if args.neptune_logger:
         logger.finalize('success')
 
+    return tsl.logger.info(res)
 
 if __name__ == '__main__':
     parser = ArgParser(add_help=False)

@@ -60,7 +60,7 @@ class SWAIN_Plotter(object):
         self.custom_metrics = custom_metrics if custom_metrics is not None else dict()
         self.log_dir = log_dir
 
-        self._outs = dict()
+        self.pred_out = dict()
         self._metrics = []
         self._idx_slices = dict()
 
@@ -81,15 +81,15 @@ class SWAIN_Plotter(object):
         for split in splits:
             out = self.trainer.predict(self.predictor,
                                        dataloaders=getattr(self.datamodule, f'{split}_dataloader')(shuffle=False))
-            self._outs[split] = casting.numpy(out)
+            self.pred_out[split] = casting.numpy(out)
             self._idx_slices[split] = self.data_index[getattr(self.datamodule, f'{split}_slice')][self._window_size:]
 
         del out
 
         # Compute metrics
         for i in self._node_idx_map.values():
-            n_dict = {split: dict() for split in self._outs.keys()}
-            for split, outs in self._outs.items():
+            n_dict = {split: dict() for split in self.pred_out.keys()}
+            for split, outs in self.pred_out.items():
                 y_hat, y, mask = outs['y_hat'], \
                                  outs['y'], \
                                  outs['mask']
