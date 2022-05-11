@@ -1,0 +1,44 @@
+
+# Data prep
+window: 16 # because of convolution dilation and num of layers
+horizon: 1
+val_start: '2000-10-1'
+per_node_scaling: False
+
+# Model
+use_node_attribs: none
+st_blocks: 1
+dropout: 0.
+norm: none
+l2_reg: 0.
+
+###
+
+model_hidden_size: 64
+decoder_hidden_size: 32
+decoder_context_size: 16
+
+temporal_conv_layers: 3
+temporal_kernel_size: 3
+temporal_dilation: 2
+
+spatial_att_layers: 1
+spatial_attention_heads: 1
+
+decoder_layers: 1
+
+out_activation: tanh
+
+# Training
+epochs: 500
+batch_size: 32
+patience: 50
+lr: 0.001
+
+use_lr_schedule: True
+grad_clip_val: null
+
+scaled_targets: True
+
+# Metadata
+tags: ['vanilla']
