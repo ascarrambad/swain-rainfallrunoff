@@ -290,10 +290,11 @@ def run_experiment(args):
                             datamodule=dm,
                             log_dir=log_dir)
 
-    splits = ['train', 'val', 'test']
+    splits = ['test', 'val', 'train']
     plotter.prepare(splits=splits)
-    plotter.generate_metrics_map(split=splits)
     plotter.dump()
+    for split in splits:
+        plotter.generate_metrics_map(split=split)
 
     # Log on neptune
     trainer.test(predictor, datamodule=dm)
@@ -309,7 +310,7 @@ def run_experiment(args):
     res = dict(val_nse=masked_nse(*val_out),
                val_mae=numpy_metrics.masked_mae(*val_out),
                val_rmse=numpy_metrics.masked_rmse(*val_out),
-               val_mape=numpy_metrics.masked_mape(*val_out)))
+               val_mape=numpy_metrics.masked_mape(*val_out))
     res.update(dict(test_nse=masked_nse(*test_out),
                     test_mae=numpy_metrics.masked_mae(*test_out),
                     test_rmse=numpy_metrics.masked_rmse(*test_out),
