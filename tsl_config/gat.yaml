@@ -41,4 +41,5 @@ grad_clip_val: null
 scaled_targets: True
 
 # Metadata
+project_name: 'LamaH-RainfallRunoff'
 tags: ['vanilla']
