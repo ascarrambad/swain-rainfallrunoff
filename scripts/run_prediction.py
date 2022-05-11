@@ -14,9 +14,8 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from tsl.data import SpatioTemporalDataset, SpatioTemporalDataModule
 from tsl.data.preprocessing import StandardScaler, MinMaxScaler
 from tsl.data.utils import WINDOW, HORIZON
-from tsl.nn.utils import casting
 from tsl.predictors import Predictor
-from tsl.utils import TslExperiment, ArgParser, parser_utils, numpy_metrics
+from tsl.utils import TslExperiment, ArgParser, parser_utils
 from tsl.utils.parser_utils import str_to_bool
 from tsl.utils.neptune_utils import TslNeptuneLogger
 
@@ -38,7 +37,7 @@ from models.gat_model import SWAIN_GATModel
 from models.grawave_model import SWAIN_GraphWaveNetModel
 
 from dataset.lamah import LamaH
-from metrics import MaskedNSE, np_masked_nse
+from utils.plotter import SWAIN_Plotter
 
 import tsl_config
 
@@ -115,22 +114,22 @@ def run_experiment(args):
     ########################################
 
     exp_name = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{args.seed}"
-    logdir = os.path.join(tsl_config.config['logs_dir'],
+    log_dir = os.path.join(tsl_config.config['logs_dir'],
                           args.dataset_name,
                           args.model_name,
                           exp_name)
     # save config for logging
-    pathlib.Path(logdir).mkdir(parents=True)
-    with open(os.path.join(logdir, 'tsl_config.yaml'), 'w') as fp:
+    pathlib.Path(log_dir).mkdir(parents=True)
+    with open(os.path.join(log_dir, 'tsl_config.yaml'), 'w') as fp:
         yaml.dump(parser_utils.config_dict_from_args(args), fp, indent=4, sort_keys=True)
 
     ########################################
     # data module                          #
     ########################################
 
-    edge_index = dataset.get_connectivity(method='binary',
-                                          layout='edge_index',
-                                          include_self=False)
+    edge_idxs_ws = dataset.get_connectivity(method='binary',
+                                            layout='edge_index',
+                                            include_self=False)
 
     edge_attr = torch.from_numpy(dataset.stream).float()
     edge_scaler = StandardScaler(axis=0)
@@ -145,7 +144,7 @@ def run_experiment(args):
     torch_dataset = SpatioTemporalDataset(*dataset.numpy(return_idx=True),
                                           exogenous=dataset.exogenous,
                                           mask=dataset.mask,
-                                          connectivity=edge_index,
+                                          connectivity=edge_idxs_ws,
                                           horizon=args.horizon,
                                           window=args.window,
                                           stride=args.stride)
@@ -171,7 +170,6 @@ def run_experiment(args):
         **dm_conf
     )
 
-
     ########################################
     # predictor                            #
     ########################################
@@ -188,9 +186,8 @@ def run_experiment(args):
 
     loss_fn = MaskedMSE(compute_on_step=True)
 
-    metrics = {'nse': MaskedNSE(compute_on_step=False),
+    metrics = {'mse': MaskedMSE(compute_on_step=False),
                'mae': MaskedMAE(compute_on_step=False),
-               'mse': MaskedMSE(compute_on_step=False),
                'mape': MaskedMAPE(compute_on_step=False)}
 
     # setup predictor
@@ -231,7 +228,7 @@ def run_experiment(args):
                                   upload_stdout=False)
     else:
         logger = TensorBoardLogger(
-            save_dir=logdir,
+            save_dir=log_dir,
             name=f'{exp_name}_{"_".join(tags)}',
 
         )
@@ -246,14 +243,14 @@ def run_experiment(args):
     )
 
     checkpoint_callback = ModelCheckpoint(
-        dirpath=logdir,
+        dirpath=log_dir,
         save_top_k=1,
         monitor='val_mse',
         mode='min',
     )
 
     trainer = pl.Trainer(max_epochs=args.epochs,
-                         default_root_dir=logdir,
+                         default_root_dir=log_dir,
                          logger=logger,
                          gpus=1 if torch.cuda.is_available() else None,
                          gradient_clip_val=args.grad_clip_val,
@@ -265,34 +262,31 @@ def run_experiment(args):
     # testing                              #
     ########################################
 
-    predictor.load_state_dict(
-       torch.load(checkpoint_callback.best_model_path, lambda storage, loc: storage)['state_dict'])
+    # Retrieve best weights and freeze model
+    # predictor.load_state_dict(torch.load(checkpoint_callback.best_model_path,
+    #                                      lambda storage, loc: storage)['state_dict'])
 
     predictor.freeze()
-    trainer.test(predictor, datamodule=dm)
 
-    output = trainer.predict(predictor, dataloaders=dm.test_dataloader())
-    output = casting.numpy(output)
-    y_hat, y_true, mask = output['y_hat'], \
-                          output['y'], \
-                          output['mask']
-    res = dict(test_nse=np_masked_nse(y_hat, y_true, mask),
-               test_mae=numpy_metrics.masked_mae(y_hat, y_true, mask),
-               test_rmse=numpy_metrics.masked_rmse(y_hat, y_true, mask),
-               test_mape=numpy_metrics.masked_mape(y_hat, y_true, mask))
+    # Plotter here
+    gauge_attribs, node_idx_map = dataset.load_plotting_data()
+    plotter = SWAIN_Plotter(edge_index=edge_idxs_ws[0],
+                            node_attribs=gauge_attribs,
+                            node_idx_map=node_idx_map,
+                            trainer=trainer,
+                            predictor=predictor,
+                            window_size=args.window,
+                            data_index=dataset.index,
+                            datamodule=dm,
+                            log_dir=log_dir)
 
-    output = trainer.predict(predictor, dataloaders=dm.val_dataloader())
-    output = casting.numpy(output)
-    y_hat, y_true, mask = output['y_hat'], \
-                          output['y'], \
-                          output['mask']
-    res.update(dict(val_nse=np_masked_nse(y_hat, y_true, mask),
-                    val_mae=numpy_metrics.masked_mae(y_hat, y_true, mask),
-                    val_rmse=numpy_metrics.masked_rmse(y_hat, y_true, mask),
-                    val_mape=numpy_metrics.masked_mape(y_hat, y_true, mask)))
+    plotter.prepare(splits=['test'])
+    plotter.generate_metrics_map(split='test')
+    plotter.dump()
+
     if args.neptune_logger:
         logger.finalize('success')
-    return tsl.logger.info(res)
+
 
 if __name__ == '__main__':
     parser = ArgParser(add_help=False)

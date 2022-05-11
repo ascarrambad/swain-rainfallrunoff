@@ -1,8 +1,6 @@
 import os
 import pickle
 import tarfile
-from functools import reduce
-from collections import defaultdict
 from datetime import datetime
 
 import numpy as np
@@ -191,6 +189,7 @@ class LamaH(PandasDataset):
     def load(self, discard_disconnected_components):
         data = self.load_raw()
         if discard_disconnected_components:
+            logger.info('Disconnected components have been discarded. Only the main river network has been loaded. ')
             data = self._discard_disconnected_components(*data)
 
         ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = data
@@ -206,6 +205,17 @@ class LamaH(PandasDataset):
         attribs_dict['catchment'] = np.nan_to_num(attribs_dict['catchment'])
 
         return ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
+
+    def load_plotting_data(self):
+        # Load gauges (nodes) attributes
+        gauge_attribs_path = os.path.join(self.root_dir, 'LamaH-CE/D_gauges/1_attributes/Gauge_attributes.csv')
+        gauge_attribs = pd.read_csv(gauge_attribs_path, sep=';').set_index('ID').astype(np.float32, errors='ignore')
+
+        # Filter out unused gauges
+        gauge_attribs = gauge_attribs.loc[self.nodes]
+        node_idx_map = {n:i for i, n in enumerate(self.nodes)}
+
+        return gauge_attribs, node_idx_map
 
     ############################################################################
 
