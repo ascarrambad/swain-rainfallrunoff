@@ -226,8 +226,8 @@ class LamaH(PandasDataset):
         # Compute validity mask and fill NaNs
         ts_qobs_df = ts_qobs_df.replace({-999: np.NaN})
         ts_qobs_mask = ~np.isnan(ts_qobs_df.values)
-        ts_qobs_df = ts_qobs_df.fillna(value=0, axis=1)
-        ts_exos_dict['u'].fillna(value=0, axis=1, inplace=True)
+        ts_qobs_df = ts_qobs_df.fillna(value=-1, axis=1)
+        ts_exos_dict['u'].fillna(value=-1, axis=1, inplace=True)
         attribs_dict['catchment'] = np.nan_to_num(attribs_dict['catchment'])
 
         return ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
