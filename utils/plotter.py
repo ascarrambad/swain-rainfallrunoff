@@ -120,6 +120,12 @@ class SWAIN_Plotter(object):
                         area=self._node_attribs.loc[n, 'area_gov'],
                         elev=self._node_attribs.loc[n, 'elev'],
                         start=self._node_attribs.loc[n, 'obsbeg_day'],
+                        impact_type=self._node_attribs.loc[n, 'typimpact'],
+                        impact_deg=self._node_attribs.loc[n, 'degimpact'],
+                        hydro_mse_cal=self._node_attribs.loc[n, 'cal_MSE'],
+                        hydro_nse_cal=self._node_attribs.loc[n, 'cal_NSE'],
+                        hydro_mse_val=self._node_attribs.loc[n, 'val_MSE'],
+                        hydro_nse_val=self._node_attribs.loc[n, 'val_NSE'],
                         **self._metrics[i][split]) for n,i in self._node_idx_map.items()]
 
         graph = nx.Graph()
@@ -139,6 +145,13 @@ class SWAIN_Plotter(object):
                         ('Area (km^2)', '@area'),
                         ('Elevation (m a.s.l.)', '@elev'),
                         ('Obs start (year)', '@start'),
+                        ('Impact type', '@impact_type'),
+                        ('Impact deg', '@impact_deg'),
+                        \
+                        ('Hydro_MSE_calibr', '@hydro_mse_cal'),
+                        ('Hydro_NSE_calibr', '@hydro_nse_cal'),
+                        ('Hydro_MSE_valid', '@hydro_mse_val'),
+                        ('Hydro_NSE_valid', '@hydro_nse_val'),
                         \
                         ('MSE', '@mse'),
                         ('MAE', '@mae'),
@@ -179,5 +192,5 @@ class SWAIN_Plotter(object):
         graph_renderer.selection_policy = NodesAndLinkedEdges()
         plot.renderers.append(graph_renderer)
 
-        output_file(os.path.join(self.log_dir, 'node_metrics.html'))
+        output_file(os.path.join(self.log_dir, f'{split}_node_metrics.html'))
         save(plot)

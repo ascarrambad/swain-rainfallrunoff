@@ -52,7 +52,8 @@ class LamaH(PandasDataset):
                 'LamaH-CE/lamah_exos.pickle',
                 'LamaH-CE/lamah_attribs.pickle',
                 'LamaH-CE/lamah_dists.npy',
-                'LamaH-CE/lamah_hierarchy.npy']
+                'LamaH-CE/lamah_hierarchy.npy',
+                'LamaH-CE/lamah_plotting_infos.h5']
 
     def download(self) -> None:
         download_url(self.url, self.root_dir)
@@ -144,6 +145,27 @@ class LamaH(PandasDataset):
         attribs_dict = {'catchment': catch_attr_df,
                         'stream': edge_attr_df}
 
+        # Build plotting attributes
+        # Load gauges (nodes) attributes
+        plot_attribs_path = os.path.join(self.root_dir, 'LamaH-CE/D_gauges/1_attributes/Gauge_attributes.csv')
+        hydrol_model_cal_path = os.path.join(self.root_dir, 'LamaH-CE/F_hydrol_model/4_output/statistics_cal.csv')
+        hydrol_model_val_path = os.path.join(self.root_dir, 'LamaH-CE/F_hydrol_model/4_output/statistics_val.csv')
+
+        plot_attribs = pd.read_csv(plot_attribs_path, sep=';').set_index('ID').astype(np.float32, errors='ignore')
+        hydrol_model_cal = pd.read_csv(hydrol_model_cal_path, sep=';') \
+                             .set_index('ID') \
+                             .astype(np.float32, errors='ignore') \
+                             .rename(columns=lambda c: f'cal_{c}', inplace=True)
+        hydrol_model_val = pd.read_csv(hydrol_model_val_path, sep=';') \
+                             .set_index('ID') \
+                             .astype(np.float32, errors='ignore') \
+                             .rename(columns=lambda c: f'val_{c}', inplace=True)
+
+        plot_attribs = plot_attribs.concat(objs=[hydrol_model_cal[:,1:6], hydrol_model_cal[:,1:6]],
+                                           axis=1)
+
+        plot_attribs = plot_attribs.filter(keep_ids, axis=0).sort_index(axis=0)
+
         # Store built data
         ts_qobs_df.to_csv(os.path.join(self.root_dir, 'LamaH-CE/lamah_qobs.csv'))
         with open(os.path.join(self.root_dir, 'LamaH-CE/lamah_exos.pickle'), 'wb') as file:
@@ -154,6 +176,10 @@ class LamaH(PandasDataset):
 
         np.save(os.path.join(self.root_dir, 'LamaH-CE/lamah_dists.npy'), dists_mtx)
         np.save(os.path.join(self.root_dir, 'LamaH-CE/lamah_hierarchy.npy'), hierarchy_mtx)
+
+        plot_attribs.to_hdf(os.path.join(self.root_dir, 'LamaH-CE/lamah_plotting_infos.h5'),
+                            key='df',
+                            mode='w')
 
         # self.clean_downloads()
 
@@ -207,15 +233,15 @@ class LamaH(PandasDataset):
         return ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
     def load_plotting_data(self):
-        # Load gauges (nodes) attributes
-        gauge_attribs_path = os.path.join(self.root_dir, 'LamaH-CE/D_gauges/1_attributes/Gauge_attributes.csv')
-        gauge_attribs = pd.read_csv(gauge_attribs_path, sep=';').set_index('ID').astype(np.float32, errors='ignore')
+        plotting_infos_path = os.path.join(self.root_dir, 'LamaH-CE/lamah_plotting_infos.h5')
+
+        plot_attribs = pd.read_hdf(plotting_infos_path, 'df')
 
         # Filter out unused gauges
-        gauge_attribs = gauge_attribs.loc[self.nodes]
+        plot_attribs = plot_attribs.loc[self.nodes]
         node_idx_map = {n:i for i, n in enumerate(self.nodes)}
 
-        return gauge_attribs, node_idx_map
+        return plot_attribs, node_idx_map
 
     ############################################################################
 
