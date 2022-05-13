@@ -1,4 +1,5 @@
 import os
+import math
 import pickle
 from typing import Mapping, Callable, Optional
 
@@ -32,7 +33,7 @@ def masked_nse(y_hat, y, mask=None):
     num = np.nansum(np.square(y - y_hat))
     den = np.nansum(np.square(y - np.nanmean(y)))
 
-    return 1. - num / den
+    return 1. - num / den if den != 0 else 999.
 
 class SWAIN_Plotter(object):
     """docstring for SWAIN_Plotter"""
@@ -115,17 +116,18 @@ class SWAIN_Plotter(object):
     def generate_metrics_map(self, split: str, geo_layout: Optional[bool] = True):
         # Generate Graph
         node_idxs = list(self._node_idx_map.values())
-        attribs = [dict(ID=n,
-                        gname=self._node_attribs.loc[n, 'name'],
+        attribs = [dict(rID=n,
+                        gID=i,
+                        n_name=self._node_attribs.loc[n, 'name'],
                         area=self._node_attribs.loc[n, 'area_gov'],
                         elev=self._node_attribs.loc[n, 'elev'],
                         start=self._node_attribs.loc[n, 'obsbeg_day'],
-                        impact_type=self._node_attribs.loc[n, 'typimpact'],
+                        impact_type=self._node_attribs.loc[n, 'typimpact'].replace(',', ', '),
                         impact_deg=self._node_attribs.loc[n, 'degimpact'],
-                        hydro_mse_cal=self._node_attribs.loc[n, 'cal_MSE'],
-                        hydro_nse_cal=self._node_attribs.loc[n, 'cal_NSE'],
-                        hydro_mse_val=self._node_attribs.loc[n, 'val_MSE'],
-                        hydro_nse_val=self._node_attribs.loc[n, 'val_NSE'],
+                        hydro_mse_cal=self._node_attribs.loc[n, 'cal_MSE'] if not math.isnan(self._node_attribs.loc[n, 'cal_MSE']) else 'NaN',
+                        hydro_nse_cal=self._node_attribs.loc[n, 'cal_NSE'] if not math.isnan(self._node_attribs.loc[n, 'cal_NSE']) else 'NaN',
+                        hydro_mse_val=self._node_attribs.loc[n, 'val_MSE'] if not math.isnan(self._node_attribs.loc[n, 'val_MSE']) else 'NaN',
+                        hydro_nse_val=self._node_attribs.loc[n, 'val_NSE'] if not math.isnan(self._node_attribs.loc[n, 'val_NSE']) else 'NaN',
                         **self._metrics[i][split]) for n,i in self._node_idx_map.items()]
 
         graph = nx.Graph()
@@ -140,8 +142,9 @@ class SWAIN_Plotter(object):
                       width=1800,
                       height=950)
 
-        hoover_infos = [('ID', '@ID'),
-                        ('Name', '@gname'),
+        hoover_infos = [('Real ID', '@rID'),
+                        ('Graph ID', '@gID'),
+                        ('Name', '@n_name'),
                         ('Area (km^2)', '@area'),
                         ('Elevation (m a.s.l.)', '@elev'),
                         ('Obs start (year)', '@start'),
