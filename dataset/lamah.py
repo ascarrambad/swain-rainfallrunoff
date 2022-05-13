@@ -23,12 +23,18 @@ class LamaH(PandasDataset):
     temporal_aggregation_options = None
     spatial_aggregation_options = None
 
-    def __init__(self, discard_disconnected_components=True, root='./data/', freq='1D'):
+    def __init__(self, discard_disconnected_components=True,
+                 root='./data/',
+                 freq='1D',
+                 replace_nans=True,
+                 mask_u=True):
         # Set root path
         self.root = root
 
         # load dataset
-        ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load(discard_disconnected_components)
+        ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load(discard_disconnected_components,
+                                                                                                replace_nans=replace_nans,
+                                                                                                mask_u=mask_u)
 
         super().__init__(dataframe=ts_qobs_df,
                          mask=ts_qobs_mask,
@@ -155,14 +161,14 @@ class LamaH(PandasDataset):
         hydrol_model_cal = pd.read_csv(hydrol_model_cal_path, sep=';') \
                              .set_index('ID') \
                              .astype(np.float32, errors='ignore') \
-                             .rename(columns=lambda c: f'cal_{c}', inplace=True)
+                             .rename(columns=lambda c: f'cal_{c}')
         hydrol_model_val = pd.read_csv(hydrol_model_val_path, sep=';') \
                              .set_index('ID') \
                              .astype(np.float32, errors='ignore') \
-                             .rename(columns=lambda c: f'val_{c}', inplace=True)
+                             .rename(columns=lambda c: f'val_{c}')
 
-        plot_attribs = plot_attribs.concat(objs=[hydrol_model_cal[:,1:6], hydrol_model_cal[:,1:6]],
-                                           axis=1)
+        plot_attribs = pd.concat(objs=[plot_attribs, hydrol_model_cal.iloc[:,1:6], hydrol_model_val.iloc[:,1:6]],
+                                 axis=1)
 
         plot_attribs = plot_attribs.filter(keep_ids, axis=0).sort_index(axis=0)
 
@@ -212,7 +218,7 @@ class LamaH(PandasDataset):
 
         return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
-    def load(self, discard_disconnected_components):
+    def load(self, discard_disconnected_components, replace_nans=True, mask_u=True):
         data = self.load_raw()
         if discard_disconnected_components:
             logger.info('Disconnected components have been discarded. Only the main river network has been loaded. ')
@@ -226,8 +232,19 @@ class LamaH(PandasDataset):
         # Compute validity mask and fill NaNs
         ts_qobs_df = ts_qobs_df.replace({-999: np.NaN})
         ts_qobs_mask = ~np.isnan(ts_qobs_df.values)
-        ts_qobs_df = ts_qobs_df.fillna(value=-1, axis=1)
-        ts_exos_dict['u'].fillna(value=-1, axis=1, inplace=True)
+        if replace_nans:
+            ts_qobs_df = ts_qobs_df.fillna(value=-1, axis=1)
+
+        ts_exos_dict['u'].replace({-999: np.NaN}, inplace=True)
+        ts_exos_mask = ~np.isnan(ts_exos_dict['u'].values.reshape(ts_qobs_mask.shape[0], len(ts_qobs_df.columns), -1))
+        if replace_nans:
+            ts_exos_dict['u'].fillna(value=-1, axis=1, inplace=True)
+
+        if mask_u:
+            ts_exos_mask = np.logical_or.reduce(ts_exos_mask, axis=-1)
+            ts_mask = np.logical_or(ts_qobs_mask, ts_exos_mask)
+        else:
+            ts_mask = ts_qobs_mask
         attribs_dict['catchment'] = np.nan_to_num(attribs_dict['catchment'])
 
         return ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
