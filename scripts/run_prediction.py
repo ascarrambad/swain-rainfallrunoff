@@ -290,7 +290,7 @@ def run_experiment(args):
                             datamodule=dm,
                             log_dir=log_dir)
 
-    splits = ['test', 'val', 'train']
+    splits = ['train', 'val', 'test']
     plotter.prepare(splits=splits)
     plotter.dump()
     for split in splits:
