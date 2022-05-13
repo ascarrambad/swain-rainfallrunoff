@@ -245,6 +245,10 @@ class LamaH(PandasDataset):
             ts_mask = np.logical_or(ts_qobs_mask, ts_exos_mask)
         else:
             ts_mask = ts_qobs_mask
+
+        ts_mask[:,:,:337,:] = np.full_like(ts_mask[:,:,:337,:], False)
+        ts_mask[:,:,338:,:] = np.full_like(ts_mask[:,:,338:,:], False)
+
         attribs_dict['catchment'] = np.nan_to_num(attribs_dict['catchment'])
 
         return ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
