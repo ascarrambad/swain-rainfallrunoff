@@ -384,10 +384,10 @@ class LamaH(PandasDataset):
             ts_exos_dict[k] = df.iloc[:, df.columns.isin(selected_ids, level=0)]
 
         # Filtering out nodes with no outgoing edges
-        keep_idxs = [idx for idx in keep_idxs if len(g.out_edges(idx)) != 0]
-        selected_ids = list(map(idx_node_map.get, keep_idxs))
+        keep_edges = [idx for idx in keep_idxs if len(g.out_edges(idx)) != 0]
+        keep_edges = list(map(idx_node_map.get, keep_edges))
         for k, df in attribs_dict.items():
-            attribs_dict[k] = df[df.index.isin(selected_ids)]
+            attribs_dict[k] = df[df.index.isin(keep_edges)]
 
         dists_mtx = dists_mtx[np.ix_(keep_idxs,keep_idxs)]
         binary_mtx = binary_mtx[np.ix_(keep_idxs,keep_idxs)]
