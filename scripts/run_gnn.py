@@ -307,33 +307,8 @@ def run_experiment(args):
     for split in splits:
         plotter.generate_metrics_map(split=split)
 
-    # Log on neptune
-    trainer.test(predictor, datamodule=dm)
-
-    val_out = plotter.pred_out['val']['y_hat'], \
-               plotter.pred_out['val']['y'], \
-               plotter.pred_out['val']['mask']
-
-    test_out = plotter.pred_out['test']['y_hat'], \
-               plotter.pred_out['test']['y'], \
-               plotter.pred_out['test']['mask']
-
-    res = dict(val_nse=masked_nse(*val_out),
-               val_mae=numpy_metrics.masked_mae(*val_out),
-               val_rmse=numpy_metrics.masked_rmse(*val_out),
-               val_mape=numpy_metrics.masked_mape(*val_out))
-    res.update(dict(test_nse=masked_nse(*test_out),
-                    test_mae=numpy_metrics.masked_mae(*test_out),
-                    test_rmse=numpy_metrics.masked_rmse(*test_out),
-                    test_mape=numpy_metrics.masked_mape(*test_out)))
-
-    output = trainer.predict(predictor, dataloaders=dm.val_dataloader())
-    output = casting.numpy(output)
-
     if args.neptune_logger:
         logger.finalize('success')
-
-    return tsl.logger.info(res)
 
 if __name__ == '__main__':
     parser = ArgParser(add_help=False)
