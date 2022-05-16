@@ -60,7 +60,6 @@ def get_dataset(dataset_name, **kwargs):
         dataset = LamaH(root='./data/',
                         freq='1D',
                         discard_disconnected_components=True,
-                        replace_nans=True,
                         mask_u=True,
                         **kwargs)
     else:
@@ -83,6 +82,7 @@ def add_parser_arguments(parent):
     parser.add_argument("--k-hops", type=int, default=-1)
     parser.add_argument("--per-node-scaling", type=bool, default=False)
     parser.add_argument("--scaler-class", type=bool, default=False)
+    parser.add_argument("--replace-nans", type=bool, default=False)
 
 
     # Training
