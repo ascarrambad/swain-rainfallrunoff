@@ -346,24 +346,23 @@ class LamaH(PandasDataset):
                 selected_ids, k_hops=None):
         if selected_ids is None: return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
-        # Create indexes
+        # Create node to idx mapping
+        idx_node_map = {i: int(n) for i, n in enumerate(ts_qobs_df.columns)}
         node_idx_map = {n:i for i, n in enumerate(ts_qobs_df.columns)}
+
+        # Create indexes
+        nodes_idxs = list(idx_node_map.keys())
+        edge_index, _ = adj_to_edge_index(binary_mtx)
+        edge_index = np.array(list(reversed(edge_index.tolist())))
         keep_idxs = list(map(node_idx_map.get, selected_ids))
+
+        # Create graph
+        g = nx.DiGraph()
+        g.add_nodes_from(nodes_idxs)
+        g.add_edges_from(edge_index.T)
 
         # Select k_oops
         if k_hops is not None:
-            # Create node to idx mapping
-            idx_node_map = {i: int(n) for i, n in enumerate(ts_qobs_df.columns)}
-
-            # Create supplementary indexes
-            nodes_idxs = list(idx_node_map.keys())
-            edge_index, _ = adj_to_edge_index(binary_mtx)
-
-            # Create graph
-            g = nx.Graph()
-            g.add_nodes_from(nodes_idxs)
-            g.add_edges_from(edge_index.T)
-
             # Select k-hop-subgraph
             subgraphs = []
             for i in keep_idxs:
@@ -376,12 +375,17 @@ class LamaH(PandasDataset):
             keep_idxs = sorted(list(set.union(*map(set, subgraphs))))
             selected_ids = list(map(idx_node_map.get, keep_idxs))
 
+        g = g.subgraph(nodes=keep_idxs)
+
         # Select data
         ts_qobs_df = ts_qobs_df[selected_ids]
 
         for k, df in ts_exos_dict.items():
             ts_exos_dict[k] = df.iloc[:, df.columns.isin(selected_ids, level=0)]
 
+        # Filtering out nodes with no outgoing edges
+        keep_idxs = [idx for idx in keep_idxs if len(g.out_edges(idx)) != 0]
+        selected_ids = list(map(idx_node_map.get, keep_idxs))
         for k, df in attribs_dict.items():
             attribs_dict[k] = df[df.index.isin(selected_ids)]
 
