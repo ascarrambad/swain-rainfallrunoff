@@ -8,6 +8,8 @@ window: 16 # because of convolution dilation and num of layers
 horizon: 1
 val_start: '2000-10-1'
 per_node_scaling: False
+scaler_class: StandardScaler
+replace_nans: False
 
 # Model
 use_node_attribs: none

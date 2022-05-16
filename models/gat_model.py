@@ -57,7 +57,7 @@ class SWAIN_GATModel(nn.Module):
             self.node_cond = ConditionalBlock(input_size=input_size,
                                               exog_size=59,
                                               output_size=model_hidden_size,
-                                              hidden_activation=hidden_activation)
+                                              activation=hidden_activation)
         # elif use_node_attribs == 'ea':
         elif use_node_attribs != 'none':
             raise NotImplementedError(f'Usage "{use_node_attribs}" for node features not available.')
@@ -66,7 +66,7 @@ class SWAIN_GATModel(nn.Module):
         self.exog_cond = ConditionalBlock(input_size=model_hidden_size if use_node_attribs != 'none' else input_size,
                                           exog_size=exog_size,
                                           output_size=model_hidden_size,
-                                          hidden_activation=hidden_activation)
+                                          activation=hidden_activation)
 
         conv_blocks = []
         for _ in range(st_blocks):
@@ -82,7 +82,7 @@ class SWAIN_GATModel(nn.Module):
                     norm=norm,
                     dropout=dropout,
                     gated=gated,
-                    hidden_activation=hidden_activation
+                    activation=hidden_activation
                 )
             )
         self.convs = nn.ModuleList(conv_blocks)
@@ -94,7 +94,7 @@ class SWAIN_GATModel(nn.Module):
                                               output_size=output_size,
                                               n_layers=decoder_layers,
                                               horizon=horizon,
-                                              hidden_activation=hidden_activation,
+                                              activation=hidden_activation,
                                               dropout=dropout)
 
     def forward(self, x, u_w, u_h, edge_index, node_attr=None, edge_attr=None, edge_weight=None, **kwargs):

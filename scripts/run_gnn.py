@@ -12,7 +12,6 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from tsl.data import SpatioTemporalDataset, SpatioTemporalDataModule
-from tsl.data.preprocessing import StandardScaler, MinMaxScaler
 from tsl.data.utils import WINDOW, HORIZON
 from tsl.predictors import Predictor
 from tsl.utils import TslExperiment, ArgParser, parser_utils
@@ -81,7 +80,7 @@ def add_parser_arguments(parent):
     parser.add_argument("--selected-ids", type=str, default=None)
     parser.add_argument("--k-hops", type=int, default=-1)
     parser.add_argument("--per-node-scaling", type=bool, default=False)
-    parser.add_argument("--scaler-class", type=bool, default=False)
+    parser.add_argument("--scaler-class", type=str, default='StandardScaler')
     parser.add_argument("--replace-nans", type=bool, default=False)
 
     # Training
@@ -112,6 +111,11 @@ def add_parser_arguments(parent):
 
 
 def run_experiment(args):
+
+    ########################################
+    # ############### SETUP ############## #
+    ########################################
+
     # Set configuration and seed
     args = copy.deepcopy(args)
     if args.seed < 0:
@@ -126,9 +130,7 @@ def run_experiment(args):
 
     tsl.logger.info(args)
 
-    ########################################
-    # create logdir and save configuration #
-    ########################################
+    # Create logdir and save configuration
 
     exp_name = f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{args.seed}"
     log_dir = os.path.join(tsl_config.config['logs_dir'],
@@ -141,19 +143,21 @@ def run_experiment(args):
         yaml.dump(parser_utils.config_dict_from_args(args), fp, indent=4, sort_keys=True)
 
     ########################################
-    # data module                          #
+    ############## DATAMODULE ##############
     ########################################
+
+    scaler_class = getattr(tsl.data.preprocessing, args.scaler_class)
 
     edge_idxs_ws = dataset.get_connectivity(method='binary',
                                             layout='edge_index',
                                             include_self=False)
 
     edge_attr = torch.from_numpy(dataset.stream).float()
-    edge_scaler = StandardScaler(axis=0)
+    edge_scaler = scaler_class(axis=0)
     edge_attr = edge_scaler.fit_transform(edge_attr)
 
     node_attr = dataset.catchment
-    node_scaler = StandardScaler(axis=0)
+    node_scaler = scaler_class(axis=0)
     node_attr = node_scaler.fit_transform(node_attr)
 
     #############
@@ -180,8 +184,8 @@ def run_experiment(args):
     dm_conf = parser_utils.filter_args(args, SpatioTemporalDataModule, return_dict=True)
     dm = SpatioTemporalDataModule(
         dataset=torch_dataset,
-        scalers={'data': StandardScaler(axis=0 if args.per_node_scaling else (0, 1)), #[steps, nodes, channels]
-                 'u': StandardScaler(axis=0 if args.per_node_scaling else (0, 1))},
+        scalers={'data': scaler_class(axis=0 if args.per_node_scaling else (0, 1)), #[steps, nodes, channels]
+                 'u': scaler_class(axis=0 if args.per_node_scaling else (0, 1))},
         splitter=dataset.get_splitter(method='at_datetime',
                                       val_start=args.val_start),
         **dm_conf
