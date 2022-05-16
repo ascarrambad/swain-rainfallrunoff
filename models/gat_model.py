@@ -45,7 +45,7 @@ class SWAIN_GATModel(nn.Module):
                  temporal_dilation=1,
                  norm='none',
                  gated=False,
-                 activation='relu',
+                 hidden_activation='relu',
                  out_activation='none',
                  dropout=0.):
         super(SWAIN_GATModel, self).__init__()
@@ -57,7 +57,7 @@ class SWAIN_GATModel(nn.Module):
             self.node_cond = ConditionalBlock(input_size=input_size,
                                               exog_size=59,
                                               output_size=model_hidden_size,
-                                              activation=activation)
+                                              hidden_activation=hidden_activation)
         # elif use_node_attribs == 'ea':
         elif use_node_attribs != 'none':
             raise NotImplementedError(f'Usage "{use_node_attribs}" for node features not available.')
@@ -66,7 +66,7 @@ class SWAIN_GATModel(nn.Module):
         self.exog_cond = ConditionalBlock(input_size=model_hidden_size if use_node_attribs != 'none' else input_size,
                                           exog_size=exog_size,
                                           output_size=model_hidden_size,
-                                          activation=activation)
+                                          hidden_activation=hidden_activation)
 
         conv_blocks = []
         for _ in range(st_blocks):
@@ -82,7 +82,7 @@ class SWAIN_GATModel(nn.Module):
                     norm=norm,
                     dropout=dropout,
                     gated=gated,
-                    activation=activation
+                    hidden_activation=hidden_activation
                 )
             )
         self.convs = nn.ModuleList(conv_blocks)
@@ -94,7 +94,7 @@ class SWAIN_GATModel(nn.Module):
                                               output_size=output_size,
                                               n_layers=decoder_layers,
                                               horizon=horizon,
-                                              activation=activation,
+                                              hidden_activation=hidden_activation,
                                               dropout=dropout)
 
     def forward(self, x, u_w, u_h, edge_index, node_attr=None, edge_attr=None, edge_weight=None, **kwargs):
@@ -129,6 +129,7 @@ class SWAIN_GATModel(nn.Module):
 
         parser.opt_list('--decoder-layers', type=int, default=1, tunable=True, options=[1, 3, 5])
 
+        parser.opt_list('--hidden-activation', type=str, default='linear', tunable=True, options=['linear', 'relu', 'tanh'])
         parser.opt_list('--out-activation', type=str, default='linear', tunable=True, options=['linear', 'relu', 'tanh'])
 
         ###

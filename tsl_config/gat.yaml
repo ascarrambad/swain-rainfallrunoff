@@ -31,6 +31,7 @@ spatial_attention_heads: 1
 
 decoder_layers: 1
 
+hidden_activation: tanh
 out_activation: tanh
 
 # Training

@@ -84,7 +84,6 @@ def add_parser_arguments(parent):
     parser.add_argument("--scaler-class", type=bool, default=False)
     parser.add_argument("--replace-nans", type=bool, default=False)
 
-
     # Training
     parser.add_argument('--l2-reg', type=float, default=0.),
 
