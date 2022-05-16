@@ -55,9 +55,14 @@ def get_model_class(model_str):
     return model
 
 
-def get_dataset(dataset_name):
+def get_dataset(dataset_name, **kwargs):
     if dataset_name == 'lamah':
-        dataset = LamaH()
+        dataset = LamaH(root='./data/',
+                        freq='1D',
+                        discard_disconnected_components=True,
+                        replace_nans=True,
+                        mask_u=True,
+                        **kwargs)
     else:
         raise ValueError(f"Dataset {dataset_name} not available in this setting.")
     return dataset
@@ -74,8 +79,11 @@ def add_parser_arguments(parent):
     parser.add_argument("--config", type=str, default='dcrnn.yaml')
 
     # Data
+    parser.add_argument("--selected-ids", type=str, default=None)
+    parser.add_argument("--k-hops", type=int, default=-1)
     parser.add_argument("--per-node-scaling", type=bool, default=False)
     parser.add_argument("--scaler-class", type=bool, default=False)
+
 
     # Training
     parser.add_argument('--l2-reg', type=float, default=0.),
@@ -115,7 +123,7 @@ def run_experiment(args):
     tsl.logger.info(f'SEED: {args.seed}')
 
     model_cls = get_model_class(args.model_name)
-    dataset = get_dataset(args.dataset_name)
+    dataset = get_dataset(args.dataset_name, selected_ids=args.selected_ids, k_hops=args.k_hops)
 
     tsl.logger.info(args)
 

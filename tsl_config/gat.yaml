@@ -1,4 +1,8 @@
 
+# Data selection
+selected_ids: null #[ 155, 157 ]
+k_hops: null #3
+
 # Data prep
 window: 16 # because of convolution dilation and num of layers
 horizon: 1

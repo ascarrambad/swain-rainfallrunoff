@@ -23,18 +23,26 @@ class LamaH(PandasDataset):
     temporal_aggregation_options = None
     spatial_aggregation_options = None
 
-    def __init__(self, discard_disconnected_components=True,
+    def __init__(self,
                  root='./data/',
                  freq='1D',
+                 \
+                 discard_disconnected_components=True,
                  replace_nans=True,
-                 mask_u=True):
+                 mask_u=True,
+                 \
+                 selected_ids=None,
+                 k_hops=None,
+                 ):
         # Set root path
         self.root = root
 
         # load dataset
         ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self.load(discard_disconnected_components,
                                                                                                 replace_nans=replace_nans,
-                                                                                                mask_u=mask_u)
+                                                                                                mask_u=mask_u,
+                                                                                                selected_ids=selected_ids,
+                                                                                                k_hops=k_hops)
 
         super().__init__(dataframe=ts_qobs_df,
                          mask=ts_qobs_mask,
@@ -218,13 +226,18 @@ class LamaH(PandasDataset):
 
         return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
-    def load(self, discard_disconnected_components, replace_nans=True, mask_u=True):
+    def load(self, discard_disconnected_components, replace_nans=True, mask_u=True, selected_ids=None, k_hops=None):
         data = self.load_raw()
+
+        # Load only main river network
         if discard_disconnected_components:
             logger.info('Disconnected components have been discarded. Only the main river network has been loaded. ')
             data = self._discard_disconnected_components(*data)
 
-        ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = data
+        # Select catchment ids and k_hops
+        ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self._select(*data,
+                                                                                     selected_ids=selected_ids,
+                                                                                     k_hops=k_hops)
 
         # Transform eventual pd.DataFrames into ndarrays
         attribs_dict.update({k: df.to_numpy() for k, df in attribs_dict.items() if isinstance(df, pd.DataFrame)})
@@ -303,8 +316,10 @@ class LamaH(PandasDataset):
 
         return hierarchy, edge_attr_df
 
+    ############################################################################
+
     def _discard_disconnected_components(self, ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx):
-        ind_to_sensor = {i: int(sensor_id) for i, sensor_id in enumerate(ts_qobs_df.columns)}
+        idx_node_map = {i: int(n) for i, n in enumerate(ts_qobs_df.columns)}
         nodes_idxs = list(range(len(ts_qobs_df.columns)))
         edge_index, _ = adj_to_edge_index(binary_mtx)
 
@@ -316,7 +331,7 @@ class LamaH(PandasDataset):
         main_comp_idx = np.argmax([len(c) for c in comps])
         del comps[main_comp_idx]
         secondary_nodes_idxs = list(set.union(*comps))
-        secondary_nodes = [ind_to_sensor[idx] for idx in secondary_nodes_idxs]
+        secondary_nodes = [idx_node_map[idx] for idx in secondary_nodes_idxs]
 
         ts_qobs_df.drop(columns=secondary_nodes, inplace=True)
         ts_exos_dict['u'].drop(columns=secondary_nodes, level='id', inplace=True)
@@ -327,6 +342,61 @@ class LamaH(PandasDataset):
 
         return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
+    def _select(self, ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx,
+                selected_ids, k_hops=None):
+        if selected_ids is None: return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
+
+        # Create indexes
+        node_idx_map = {n:i for i, n in enumerate(ts_qobs_df.columns)}
+        keep_idxs = list(map(node_idx_map.get, selected_ids))
+
+        # Select k_oops
+        if k_hops is not None:
+            # Create node to idx mapping
+            idx_node_map = {i: int(n) for i, n in enumerate(ts_qobs_df.columns)}
+
+            # Create supplementary indexes
+            nodes_idxs = list(idx_node_map.keys())
+            edge_index, _ = adj_to_edge_index(binary_mtx)
+
+            # Create graph
+            g = nx.Graph()
+            g.add_nodes_from(nodes_idxs)
+            g.add_edges_from(edge_index.T)
+
+            # Select k-hop-subgraph
+            subgraphs = []
+            for i in keep_idxs:
+                k_hop_subgraph = nx.ego_graph(G=g,
+                                              n=i,
+                                              radius=k_hops)
+                subgraphs.append(k_hop_subgraph.nodes)
+
+            # Return for selection
+            keep_idxs = sorted(list(set.union(*map(set, subgraphs))))
+            selected_ids = list(map(idx_node_map.get, keep_idxs))
+
+        # Select data
+        ts_qobs_df = ts_qobs_df[selected_ids]
+
+        for k, df in ts_exos_dict.items():
+            ts_exos_dict[k] = df.iloc[:, df.columns.isin(selected_ids, level=0)]
+
+        for k, df in attribs_dict.items():
+            attribs_dict[k] = df[df.index.isin(selected_ids)]
+
+        dists_mtx = dists_mtx[np.ix_(keep_idxs,keep_idxs)]
+        binary_mtx = binary_mtx[np.ix_(keep_idxs,keep_idxs)]
+
+        return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
+
+
+
+
+
+
+
+    ############################################################################
 
     def compute_similarity(self, method: str, **kwargs):
         if method == 'distance':
