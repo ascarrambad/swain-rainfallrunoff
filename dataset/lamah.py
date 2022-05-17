@@ -229,6 +229,9 @@ class LamaH(PandasDataset):
     def load(self, discard_disconnected_components, replace_nans=True, mask_u=True, selected_ids=None, k_hops=None):
         data = self.load_raw()
 
+        # Discard empty nodes
+        data = self._filter_nodes_wo_data(*data)
+
         # Load only main river network
         if discard_disconnected_components:
             logger.info('Disconnected components have been discarded. Only the main river network has been loaded. ')
@@ -238,6 +241,9 @@ class LamaH(PandasDataset):
         ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx = self._select(*data,
                                                                                      selected_ids=selected_ids,
                                                                                      k_hops=k_hops)
+
+        self.idx_node_map = {i: int(n) for i, n in enumerate(ts_qobs_df.columns)}
+        self.node_idx_map = {n:i for i, n in enumerate(ts_qobs_df.columns)}
 
         # Transform eventual pd.DataFrames into ndarrays
         attribs_dict.update({k: df.to_numpy() for k, df in attribs_dict.items() if isinstance(df, pd.DataFrame)})
@@ -317,6 +323,20 @@ class LamaH(PandasDataset):
         return hierarchy, edge_attr_df
 
     ############################################################################
+
+    def _filter_nodes_wo_data(self, ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx):
+        node_idx_map = {n:i for i, n in enumerate(ts_qobs_df.columns)}
+        nodes_without_data = [92, 99, 104, 110, 249, 295, 296, 298, 307, 309, 319, 324, 327, 329, 333, 341, 358, 367, 374, 391, 622, 623, 625, 660, 696, 705, 716, 734, 790, 791, 793, 830, 832, 852]
+        node_wo_data_idx = list(map(node_idx_map.get, nodes_without_data))
+
+        ts_qobs_df.drop(columns=nodes_without_data, inplace=True)
+        ts_exos_dict['u'].drop(columns=nodes_without_data, level='id', inplace=True)
+
+        attribs_dict = {k: df.drop(index=nodes_without_data, errors='ignore') for k, df in attribs_dict.items()}
+        dists_mtx = np.delete(np.delete(dists_mtx, node_wo_data_idx, axis=0), node_wo_data_idx, axis=1)
+        binary_mtx = np.delete(np.delete(binary_mtx, node_wo_data_idx, axis=0), node_wo_data_idx, axis=1)
+
+        return ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
 
     def _discard_disconnected_components(self, ts_qobs_df, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx):
         idx_node_map = {i: int(n) for i, n in enumerate(ts_qobs_df.columns)}
