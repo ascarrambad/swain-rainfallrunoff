@@ -63,7 +63,7 @@ class SWAIN_SpatioTemporalConvNet(nn.Module):
         self.spatial_convs = nn.ModuleList(GATConv(in_channels=output_size,
                                                    out_channels=output_size,
                                                    heads=spatial_attention_heads,
-                                                   concat=True,
+                                                   concat=False,
                                                    dropout=dropout,
                                                    add_self_loops=False,
                                                    edge_dim=3) for _ in range(spatial_convs))
