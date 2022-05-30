@@ -33,7 +33,9 @@ class MaskedNSEBA(MaskedMetric):
                                           dist_sync_fn=dist_sync_fn,
                                           metric_kwargs={'reduction': 'none'},
                                           at=at)
-        self.per_basin_stds = torch.from_numpy(per_basin_stds).float()
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.per_basin_stds = torch.from_numpy(per_basin_stds).float().to(device)
 
     def _compute_masked(self, y_hat, y, mask):
         _check_same_shape(y_hat, y)
