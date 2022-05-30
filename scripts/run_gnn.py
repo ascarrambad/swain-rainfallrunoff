@@ -36,7 +36,9 @@ from models.gat_model import SWAIN_GATModel
 from models.grawave_model import SWAIN_GraphWaveNetModel
 
 from dataset.lamah import LamaH
-from utils.plotter import SWAIN_Plotter, masked_nse
+from utils.plotter import SWAIN_Plotter
+from utils.losses import MaskedNSEBA
+
 
 import tsl_config
 
@@ -85,6 +87,7 @@ def add_parser_arguments(parent):
 
     # Training
     parser.add_argument('--l2-reg', type=float, default=0.),
+    parser.add_argument('--loss', type=str, default='mse')
 
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--patience', type=int, default=50)
@@ -205,7 +208,11 @@ def run_experiment(args):
                                             target_cls=model_cls,
                                             return_dict=True)
 
-    loss_fn = MaskedMSE(compute_on_step=True)
+    if args.loss == 'mse':
+        loss_fn = MaskedMSE(compute_on_step=True)
+    elif args.loss == 'nse':
+        loss_fn = MaskedNSEBA(compute_on_step=True,
+                              per_basin_stds=np.std(dataset.numpy(), axis=0))
 
     metrics = {'mse': MaskedMSE(compute_on_step=False),
                'mae': MaskedMAE(compute_on_step=False),
