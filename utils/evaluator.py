@@ -4,6 +4,7 @@ from typing import Mapping, Callable, Optional
 
 import numpy as np
 import pandas as pd
+import networkx as nx
 
 from pytorch_lightning import Trainer
 
