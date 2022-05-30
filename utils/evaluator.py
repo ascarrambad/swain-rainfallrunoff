@@ -1,6 +1,5 @@
 import os
 import pickle
-from collections import namedtuple
 from typing import Mapping, Callable, Optional
 
 import numpy as np
@@ -118,13 +117,13 @@ class SWAIN_Evaluator(object):
 
     def dump(self):
         dump_dict = dict(edge_index=self._edge_index,
-                        node_attribs=self._node_attribs,
-                        node_idx_map=self._node_idx_map,
-                        custom_metrics=self.custom_metrics
-                        pred_out=self.pred_out
-                        metrics=self._metrics
-                        idx_slices=self._idx_slices
-                        graphs=self._graphs)
+                         node_attribs=self._node_attribs,
+                         node_idx_map=self._node_idx_map,
+                         custom_metrics=self.custom_metrics,
+                         pred_out=self.pred_out,
+                         metrics=self._metrics,
+                         idx_slices=self._idx_slices,
+                         graphs=self._graphs)
 
         # Save obj
         with open(os.path.join(self.log_dir, 'eval_dump.pickle'), 'wb') as f:
