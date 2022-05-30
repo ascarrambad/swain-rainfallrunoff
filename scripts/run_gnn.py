@@ -36,7 +36,7 @@ from models.gat_model import SWAIN_GATModel
 from models.grawave_model import SWAIN_GraphWaveNetModel
 
 from dataset.lamah import LamaH
-from utils.plotter import SWAIN_Plotter
+from utils.evaluator import SWAIN_Evaluator
 from utils.losses import MaskedNSEBA
 
 
@@ -298,19 +298,19 @@ def run_experiment(args):
 
     # Plot out results
     gauge_attribs, node_idx_map = dataset.load_plotting_data()
-    plotter = SWAIN_Plotter(edge_index=edge_idxs_ws[0],
-                            node_attribs=gauge_attribs,
-                            node_idx_map=node_idx_map,
-                            trainer=trainer,
-                            predictor=predictor,
-                            window_size=args.window,
-                            data_index=dataset.index,
-                            datamodule=dm,
-                            log_dir=log_dir)
+    evaluator = SWAIN_Evaluator(edge_index=edge_idxs_ws[0],
+                                node_attribs=gauge_attribs,
+                                node_idx_map=node_idx_map,
+                                trainer=trainer,
+                                predictor=predictor,
+                                window_size=args.window,
+                                data_index=dataset.index,
+                                datamodule=dm,
+                                log_dir=log_dir)
 
     splits = ['train', 'val', 'test']
-    plotter.prepare(splits=splits)
-    plotter.dump()
+    evaluator.prepare(splits=splits)
+    evaluator.dump()
     for split in splits:
         plotter.generate_metrics_map(split=split)
 
