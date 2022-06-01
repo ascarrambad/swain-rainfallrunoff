@@ -311,8 +311,6 @@ def run_experiment(args):
     splits = ['train', 'val', 'test']
     evaluator.prepare(splits=splits)
     evaluator.dump()
-    for split in splits:
-        plotter.generate_metrics_map(split=split)
 
     if args.neptune_logger:
         logger.finalize('success')
