@@ -85,9 +85,11 @@ class LamaH(PandasDataset):
 
         # Build discharge and exogenous data
         gauges_path = os.path.join(self.root_dir, 'LamaH-CE/D_gauges/2_timeseries/daily/')
+        reference_path = os.path.join(self.root_dir, 'LamaH-CE/F_hydrol_model/2_timeseries/')
         exos_path = os.path.join(self.root_dir, 'LamaH-CE/B_basins_intermediate_all/2_timeseries/daily/')
 
         ts_qobs_dfs = []
+        ts_refs_dfs = []
         ts_exos_dfs = []
 
         gauges_files = set(os.listdir(gauges_path))
@@ -124,6 +126,19 @@ class LamaH(PandasDataset):
 
             ######
 
+            ref_path = os.path.join(reference_path, gauge_filename)
+            ref_df = pd.read_csv(ref_path, sep=';')
+            date_keys = ['YYYY','MM','DD']
+
+            ref_df['date'] = pd.to_datetime(ref_df[date_keys].rename(columns=dict(zip(date_keys, ['year', 'month', 'day']))))
+            ref_df = ref_df.set_index('date')
+            ref_df = ref_df.loc[:, ['Qsim_A']]
+            ref_df = ref_df.rename(columns={'Qsim_A': gauge_id})
+
+            ts_refs_dfs.append(ref_df)
+
+            ######
+
             exo_path = os.path.join(exos_path, gauge_filename)
             exo_df = pd.read_csv(exo_path, sep=';')
 
@@ -138,11 +153,14 @@ class LamaH(PandasDataset):
             ts_exos_dfs.append(exo_df)
 
         ts_qobs_df = pd.concat(ts_qobs_dfs, axis=1)
+        ts_refs_df = pd.concat(ts_refs_dfs, axis=1)
         ts_exos_df = pd.concat(ts_exos_dfs, axis=1).astype(np.float32, errors='ignore')
 
         ts_qobs_df = ts_qobs_df.sort_index(axis=1)
+        ts_refs_df = ts_refs_df.sort_index(axis=1)
         ts_exos_df = ts_exos_df.sort_index(axis=1, level='id')
 
+        ts_refs_df = ts_refs_df.replace({-999: np.NaN})
         ts_exos_dict = {'u': ts_exos_df}
 
         # Build distances matrix
@@ -182,6 +200,9 @@ class LamaH(PandasDataset):
 
         # Store built data
         ts_qobs_df.to_csv(os.path.join(self.root_dir, 'LamaH-CE/lamah_qobs.csv'))
+        ts_refs_df.to_hdf(os.path.join(self.root_dir, 'LamaH-CE/lamah_refs.h5'),
+                          key='df',
+                          mode='w')
         with open(os.path.join(self.root_dir, 'LamaH-CE/lamah_exos.pickle'), 'wb') as file:
             pickle.dump(ts_exos_dict, file, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -267,6 +288,10 @@ class LamaH(PandasDataset):
         attribs_dict['catchment'] = np.nan_to_num(attribs_dict['catchment'])
 
         return ts_qobs_df, ts_qobs_mask, ts_exos_dict, attribs_dict, dists_mtx, binary_mtx
+
+    def load_reference_ts(self):
+        reference_path = os.path.join(self.root_dir, 'LamaH-CE/lamah_refs.h5')
+        return pd.read_hdf(reference_path, 'df')
 
     def load_plotting_data(self):
         plotting_infos_path = os.path.join(self.root_dir, 'LamaH-CE/lamah_plotting_infos.h5')
