@@ -17,79 +17,29 @@ from bokeh.models import (Range1d,
                           NodesAndLinkedEdges,
                           StaticLayoutProvider, LinearColorMapper,
                           \
-                          ColumnDataSource,
+                          ColumnDataSource, GeoJSONDataSource,
                           Panel, Tabs, PreText, Select, CheckboxGroup, RadioGroup, Div)
 from bokeh.models.renderers import GraphRenderer
 
-def getGeometryCoords(row, geom, coord_type, shape_type):
-    """
-    Returns the coordinates ('x' or 'y') of edges of a Polygon exterior.
 
-    :param: (GeoPandas Series) row : The row of each of the GeoPandas DataFrame.
-    :param: (str) geom : The column name.
-    :param: (str) coord_type : Whether it's 'x' or 'y' coordinate.
-    :param: (str) shape_type
-    """
-
-    # Parse the exterior of the coordinate
-    if shape_type.lower() == 'polygon':
-        if coord_type == 'x':
-            # Get the x coordinates of the exterior
-            return list(row[geom].exterior.coords.xy[0])
-        elif coord_type == 'y':
-            # Get the y coordinates of the exterior
-            return list(row[geom].exterior.coords.xy[1])
-    elif shape_type.lower() == 'point':
-        if coord_type == 'x':
-            return row[geom].x
-        elif coord_type == 'y':
-            return row[geom].y
-    elif shape_type.lower() == 'linestring':
-        if coord_type == 'x':
-            return list(row[geom].coords.xy[0])
-        elif coord_type == 'y':
-            return list(row[geom].coords.xy[1])
-
-
-def convert_GeoPandas_to_Bokeh_format(gdf):
-    """
-    Function to convert a GeoPandas GeoDataFrame to a Bokeh
-    ColumnDataSource object.
-
-    :param: (GeoDataFrame) gdf: GeoPandas GeoDataFrame with polygon(s) under
-                                the column name 'geometry.'
-
-    :return: ColumnDataSource for Bokeh.
-    """
-
+def gpd_to_geojson(gdf):
     shape_type = gdf.iloc[0].geometry.type
 
-    gdf_new = gdf.drop('geometry', axis=1).copy()
-    gdf_new['x'] = gdf.apply(getGeometryCoords,
-                             geom='geometry',
-                             coord_type='x',
-                             shape_type=shape_type,
-                             axis=1)
-
-    gdf_new['y'] = gdf.apply(getGeometryCoords,
-                             geom='geometry',
-                             coord_type='y',
-                             shape_type=shape_type,
-                             axis=1)
-
-    return shape_type, gdf_new
+    return shape_type, GeoJSONDataSource(geojson=gdf.to_json())
 
 class SWAIN_Plotter(object):
 
-    def __init__(self, results, reference_df, info_map_shp=None):
+    def __init__(self, results, def_node, reference_df, info_map_shp=None, crs=None):
         super(SWAIN_Plotter, self).__init__()
 
         self.results = results
         self.refs_df = reference_df
         self.info_map_shp = info_map_shp or []
+        self._defnode = def_node
+        self._crs = crs
 
         for i,shp in enumerate(self.info_map_shp):
-            shp_type, shp_source = convert_GeoPandas_to_Bokeh_format(shp['source'].to_crs('EPSG:3857'))
+            shp_type, shp_source = gpd_to_geojson(shp['source'].to_crs('EPSG:3857'))
             self.info_map_shp[i]['source'] = shp_source
             self.info_map_shp[i] = dict(type=shp_type, plot=self.info_map_shp[i])
 
@@ -118,11 +68,11 @@ class SWAIN_Plotter(object):
             shape_type = shp['type'].lower()
              # Parse the exterior of the coordinate
             if shape_type.lower() == 'polygon':
-                glyph = self.info_map.multi_polygons('x', 'y', **shp['plot'])
+                glyph = self.info_map.multi_polygons(**shp['plot'])
             elif shape_type.lower() == 'point':
                 glyph = None
             elif shape_type.lower() == 'linestring':
-                glyph = self.info_map.multi_line('x', 'y', **shp['plot'])
+                glyph = self.info_map.multi_line(**shp['plot'])
 
             self._line_shps.append(glyph)
 
@@ -152,18 +102,16 @@ class SWAIN_Plotter(object):
         self.info_map.add_tools(node_hover_tool, TapTool())
 
         # Build graph layout
-        node_idxs = list(self.results.node_idx_map.values())
-        x = self.results.node_attribs.loc[:, 'lon']
-        y = self.results.node_attribs.loc[:, 'lat']
-
-        coords = gpd.GeoDataFrame(dict(geometry=gpd.points_from_xy(x, y)),
-                                  crs='EPSG:3035') \
+        coords = gpd.GeoDataFrame(dict(geometry=gpd.points_from_xy(self.results.node_attribs.loc[:, 'lon'],
+                                                                   self.results.node_attribs.loc[:, 'lat'])),
+                                  crs=self._crs) \
                     .to_crs('EPSG:3857')
 
-        _, coords = convert_GeoPandas_to_Bokeh_format(coords)
+        x = coords.geometry.x
+        y = coords.geometry.y
 
-        self._info_map_layout = dict(zip(node_idxs, zip(coords['x'].to_list(), coords['y'].to_list())))
-
+        node_idxs = list(self.results.node_idx_map.values())
+        self._info_map_layout = dict(zip(node_idxs, zip(x.to_list(), y.to_list())))
 
         # Build commands & infos
         def replot_map(attr, old, new):
@@ -208,11 +156,12 @@ class SWAIN_Plotter(object):
         node_color_opt = ['nse', 'mse', 'hydro_nse_'+hydro_split, 'hydro_mse_'+hydro_split]
         node_size_opt = [10, 'elev', 'area_gov']
 
-        # rivernet, basins = self._line_shps
-        (rivernet,) = self._line_shps
+        if len(self._line_shps) > 0:
+            # rivernet, basins = self._line_shps
+            (rivernet,) = self._line_shps
 
-        # basins.visible = 0 in self.info_map_shp_ctrl.active
-        rivernet.visible = 1 in self.info_map_shp_ctrl.active
+            # basins.visible = 0 in self.info_map_shp_ctrl.active
+            rivernet.visible = 1 in self.info_map_shp_ctrl.active
 
         if self.info_map_node_size_ctrl.active != 0:
             node_sizes = self.results.node_attribs.loc[list(self.results.node_idx_map.keys()), node_size_opt[self.info_map_node_size_ctrl.active]] \
@@ -284,17 +233,16 @@ class SWAIN_Plotter(object):
         self.metrics_map.add_tools(node_hover_tool, TapTool())
 
         # Build graph layout
+        coords = gpd.GeoDataFrame(dict(geometry=gpd.points_from_xy(self.results.node_attribs.loc[:, 'lon'],
+                                                                   self.results.node_attribs.loc[:, 'lat'])),
+                                  crs=self._crs) \
+                    .to_crs('EPSG:3857')
+
+        x = coords.geometry.x
+        y = coords.geometry.y
+
         node_idxs = list(self.results.node_idx_map.values())
-        x = self.results.node_attribs.loc[:, 'lon']
-        y = self.results.node_attribs.loc[:, 'lat']
-
-        coords = gpd.GeoDataFrame(dict(geometry=gpd.points_from_xy(x, y)),
-                                  crs='EPSG:3035').to_crs('EPSG:3857')
-
-        _, coords = convert_GeoPandas_to_Bokeh_format(coords)
-
-        self._metrics_map_layout = dict(zip(node_idxs, zip(coords['x'].to_list(), coords['y'].to_list())))
-
+        self._metrics_map_layout = dict(zip(node_idxs, zip(x.to_list(), y.to_list())))
 
         # Build commands & infos
 
@@ -361,7 +309,7 @@ class SWAIN_Plotter(object):
         graph_renderer.selection_policy = NodesAndLinkedEdges()
 
         if not isinstance(self.metrics_map.renderers[-1], GraphRenderer):
-            graph_renderer.node_renderer.data_source.selected.indices = [self.results.node_idx_map[399]]
+            graph_renderer.node_renderer.data_source.selected.indices = [self.results.node_idx_map[self._defnode]]
         else:
             graph_renderer.node_renderer.data_source.selected.indices = self.metrics_map.renderers[-1].node_renderer.data_source.selected.indices
         graph_renderer.node_renderer.data_source.selected.on_change("indices", self._update_ts)
@@ -383,15 +331,22 @@ class SWAIN_Plotter(object):
         hydro_split = 'val' if split == 'test' else 'cal'
 
         # Retrieve metrics data
-        nse = pd.DataFrame(dict(nse=[n[split]['nse'] for n in self.results.metrics]),
-                           index=list(self.results.node_idx_map.keys()))
-        hydro_nse = self.results.node_attribs.loc[:, hydro_split + '_NSE']
-        nse_df = pd.concat([nse, hydro_nse], axis=1)
+        nse_df = pd.DataFrame(dict(nse=[n[split]['nse'] for n in self.results.metrics]),
+                              index=list(self.results.node_idx_map.keys()))
 
-        mse = pd.DataFrame(dict(mse=[n[split]['mse'] for n in self.results.metrics]),
-                           index=list(self.results.node_idx_map.keys()))
-        hydro_mse = self.results.node_attribs.loc[:, hydro_split + '_MSE']
-        mse_df = pd.concat([mse, hydro_mse], axis=1)
+        mse_df = pd.DataFrame(dict(mse=[n[split]['mse'] for n in self.results.metrics]),
+                              index=list(self.results.node_idx_map.keys()))
+
+        try:
+            hydro_nse = self.results.node_attribs.loc[:, hydro_split + '_NSE']
+            nse_df = pd.concat([nse_df, hydro_nse], axis=1)
+            hydro_mse = self.results.node_attribs.loc[:, hydro_split + '_MSE']
+            mse_df = pd.concat([mse_df, hydro_mse], axis=1)
+            colormap = ['orange', 'green']
+            color = None
+        except:
+            colormap = None
+            color = 'orange'
 
 
         mape_df = pd.DataFrame(dict(mape=[n[split]['mape'] for n in self.results.metrics]),
@@ -402,7 +357,8 @@ class SWAIN_Plotter(object):
 
         nse_hist_plot = nse_df.plot.hist(bins=np.linspace(0, 1, 100),
                                          xticks=np.linspace(0, 1, 10),
-                                         colormap=['orange', 'green'],
+                                         colormap=colormap,
+                                         color=color,
                                          figsize=(300, 300),
                                          vertical_xlabel=True,
                                          xlabel=None,
@@ -415,7 +371,8 @@ class SWAIN_Plotter(object):
 
         nse_cdf_plot = nse_df.plot.hist(bins=np.linspace(0, 1, 100),
                                         xticks=np.linspace(0, 1, 10),
-                                        colormap=['orange', 'green'],
+                                        colormap=colormap,
+                                        color=color,
                                         figsize=(300, 300),
                                         vertical_xlabel=True,
                                         xlabel=None,
@@ -429,7 +386,8 @@ class SWAIN_Plotter(object):
 
         mse_hist_plot = mse_df.plot.hist(bins=np.linspace(0, 100, 100),
                                          xticks=np.linspace(0, 100, 10),
-                                         colormap=['orange', 'green'],
+                                         colormap=colormap,
+                                         color=color,
                                          figsize=(300, 300),
                                          vertical_xlabel=True,
                                          xlabel=None,
@@ -441,7 +399,8 @@ class SWAIN_Plotter(object):
 
         mse_cdf_plot = mse_df.plot.hist(bins=np.linspace(0, 100, 100),
                                         xticks=np.linspace(0, 100, 10),
-                                        colormap=['orange', 'green'],
+                                        colormap=colormap,
+                                        color=color,
                                         figsize=(300, 300),
                                         vertical_xlabel=True,
                                         xlabel=None,
@@ -546,7 +505,11 @@ class SWAIN_Plotter(object):
         # Get model outputs
         y_hat, y_true = self.results.pred_out[split]['y_hat'][:,:,node_idx,:], \
                         self.results.pred_out[split]['y'][:,:,node_idx,:]
-        y_ref = self.refs_df.loc[self.results.idx_slices[split], node].to_numpy()
+
+        if not self.refs_df.empty:
+            y_ref = self.refs_df.loc[self.results.idx_slices[split], node].to_numpy()
+        else:
+            y_ref = np.ravel(np.zeros_like(y_true))
 
         # Flatten arrays
         y_hat = np.ravel(y_hat)
@@ -557,7 +520,7 @@ class SWAIN_Plotter(object):
                                  y_true=y_true,
                                  y_ref=y_ref,
                                  hat_residuals=y_true - y_hat,
-                                 ref_residuals=y_true - y_ref))
+                                 ref_residuals=y_true - y_ref if not self.refs_df.empty else y_ref))
 
     # Callbacks
     def _update_ts_hist(self, df):
@@ -566,7 +529,6 @@ class SWAIN_Plotter(object):
         rootLayout = self.plot_doc.get_model_by_name('ts_layout')
         listOfSubLayouts = rootLayout.children
 
-        # hist_df = pd.DataFrame({'y_true_all': self.results.pred_out[split]['y'].ravel()})
         hist_df = df[['y_hat','y_true', 'y_ref']]
 
         hist_plot = hist_df.plot.hist(bins=np.linspace(0, hist_df.max().max(), 100),
@@ -585,7 +547,6 @@ class SWAIN_Plotter(object):
         y_hat, y_true = self.results.pred_out[split]['y_hat'].ravel(), \
                         self.results.pred_out[split]['y'].ravel()
 
-        # hist_df = pd.DataFrame({'residuals_all': y_true - y_hat})
         hist_df = df[['hat_residuals', 'ref_residuals']]
 
         hist_plot = hist_df.plot.hist(bins=np.linspace(0, hist_df.max().max(), 100),
@@ -612,7 +573,7 @@ class SWAIN_Plotter(object):
         try:
             i = self.metrics_map.renderers[1].node_renderer.data_source.selected.indices[0]
         except:
-            i = self.results.node_idx_map[399]
+            i = self.results.node_idx_map[self._defnode]
 
         for metric, value in self.results.metrics[i][self.splits_ticker.value].items():
             metrics_label += f'<b>{metric.upper()}</b>: {value:.2f}, '
@@ -625,7 +586,7 @@ class SWAIN_Plotter(object):
         try:
             i = self.metrics_map.renderers[1].node_renderer.data_source.selected.indices[0]
         except:
-            i = self.results.node_idx_map[399]
+            i = self.results.node_idx_map[self._defnode]
 
         node = self._idx_node_map[i]
         df = self._update_ts_data(split, i)

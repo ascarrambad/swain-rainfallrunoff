@@ -36,6 +36,7 @@ from models.gat_model import SWAIN_GATModel
 from models.grawave_model import SWAIN_GraphWaveNetModel
 
 from dataset.lamah import LamaH
+from dataset.ergene import Ergene
 from utils.evaluator import SWAIN_Evaluator
 from utils.losses import MaskedNSEBA
 
@@ -63,6 +64,11 @@ def get_dataset(dataset_name, **kwargs):
                         discard_disconnected_components=True,
                         mask_u=True,
                         **kwargs)
+    elif dataset_name =='ergene':
+        dataset = Ergene(root='./data/',
+                         freq='1D',
+                         mask_u=False,
+                         **kwargs)
     else:
         raise ValueError(f"Dataset {dataset_name} not available in this setting.")
     return dataset
@@ -159,10 +165,6 @@ def run_experiment(args):
     edge_scaler = scaler_class(axis=0)
     edge_attr = edge_scaler.fit_transform(edge_attr)
 
-    node_attr = dataset.catchment
-    node_scaler = scaler_class(axis=0)
-    node_attr = node_scaler.fit_transform(node_attr)
-
     #############
 
     torch_dataset = SpatioTemporalDataset(*dataset.numpy(return_idx=True),
@@ -173,6 +175,9 @@ def run_experiment(args):
                                           window=args.window,
                                           stride=args.stride)
     if args.use_node_attribs != 'none':
+        node_attr = dataset.catchment
+        node_scaler = scaler_class(axis=0)
+        node_attr = node_scaler.fit_transform(node_attr)
         torch_dataset.add_attribute(name='node_attr',
                                     value=node_attr,
                                     node_level=True,

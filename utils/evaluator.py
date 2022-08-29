@@ -55,22 +55,28 @@ class SWAIN_Evaluator(object):
 
     def _build_graph(self, split):
         # Generate Graph
-        node_idxs = list(self._node_idx_map.values())
-        attribs = [dict(rID=n,
-                        gID=i,
-                        n_name=self._node_attribs.loc[n, 'name'],
-                        area=self._node_attribs.loc[n, 'area_gov'],
-                        elev=self._node_attribs.loc[n, 'elev'],
-                        start=self._node_attribs.loc[n, 'obsbeg_day'],
-                        impact_type=self._node_attribs.loc[n, 'typimpact'].replace(',', ', '),
-                        impact_deg=self._node_attribs.loc[n, 'degimpact'],
-                        hydro_mse_cal=float(np.nan_to_num(self._node_attribs.loc[n, 'cal_MSE'], nan=-999)),
-                        hydro_nse_cal=float(np.nan_to_num(self._node_attribs.loc[n, 'cal_NSE'], nan=-999)),
-                        hydro_mse_val=float(np.nan_to_num(self._node_attribs.loc[n, 'val_MSE'], nan=-999)),
-                        hydro_nse_val=float(np.nan_to_num(self._node_attribs.loc[n, 'val_NSE'], nan=-999)),
-                        **self._metrics[i][split]) for n,i in self._node_idx_map.items()]
-
         graph = nx.Graph()
+        node_idxs = list(self._node_idx_map.values())
+
+        if len(self._node_attribs.columns) > 2:
+            attribs = [dict(rID=n,
+                            gID=i,
+                            n_name=self._node_attribs.loc[n, 'name'],
+                            area=self._node_attribs.loc[n, 'area_gov'],
+                            elev=self._node_attribs.loc[n, 'elev'],
+                            start=self._node_attribs.loc[n, 'obsbeg_day'],
+                            impact_type=self._node_attribs.loc[n, 'typimpact'].replace(',', ', '),
+                            impact_deg=self._node_attribs.loc[n, 'degimpact'],
+                            hydro_mse_cal=float(np.nan_to_num(self._node_attribs.loc[n, 'cal_MSE'], nan=-999)),
+                            hydro_nse_cal=float(np.nan_to_num(self._node_attribs.loc[n, 'cal_NSE'], nan=-999)),
+                            hydro_mse_val=float(np.nan_to_num(self._node_attribs.loc[n, 'val_MSE'], nan=-999)),
+                            hydro_nse_val=float(np.nan_to_num(self._node_attribs.loc[n, 'val_NSE'], nan=-999)),
+                            **self._metrics[i][split]) for n,i in self._node_idx_map.items()]
+        else:
+            attribs = [dict(rID=n,
+                            gID=i,
+                            **self._metrics[i][split]) for n,i in self._node_idx_map.items()]
+
         graph.add_nodes_from(list(zip(node_idxs, attribs)))
         graph.add_edges_from(self._edge_index.T)
 
