@@ -8,7 +8,7 @@ The following repo contains the code and tools to train several types of Rainfal
 
 The goal is to represent the entire watershed of a given river (mainly the Danube river network, using the data of the LamaH-CE dataset) as a Graph representing gauge station as Nodes, the river geography as weighted Edges, and exploit exogenous information (such as weather data and/or catchment/basin information) associated with each measuring station.
 
-Gauge stations measure the flow rate ($m^3/s$) in various points of the river. Each one has a water basin associated, where weather measurements/forecasts have been collected. Moreover, there could be some basin-associated attributes, such as soil characteristics and environmental indicators.
+Gauge stations measure the flow rate ( $m^3/s$ ) in various points of the river. Each one has a water basin associated, where weather measurements/forecasts have been collected. Moreover, there could be some basin-associated attributes, such as soil characteristics and environmental indicators.
 
 The problem is thus centered on a one-step ahead non-linear regression task on historical time-series data, each timestamp being associated both to the measurements time-series (univariate, water flow) as well as the exougenous data time-series (multivariate).
 
@@ -62,9 +62,7 @@ While the usual metrics for regression problems apply, such as MSE and MAE, hydr
 Unfortunately, the NSE (which effectively is the R2 coeffiencet) can't be used while training on a graph with multiple basins: each gauge stations measures the flow-rate in that point, which surely has a very different range than other parts of the river network. The effects are low training stability and good performance on very few nodes, bad otherwise (NSE < 0).
 
 This is why *Kratzert et al.* introduced a basin-averaged metric:
-$$
-\mathrm{NSE}^*=\frac{1}{B} \sum_{b=1}^B \sum_{n=1}^N \frac{\left(\widehat{y}_n-y_n\right)^2}{(s(b)+\epsilon)^2}
-$$
+$$\mathrm{NSE}^*=\frac{1}{B} \sum_{b=1}^B \sum_{n=1}^N \frac{\left(\widehat{y}_n-y_n\right)^2}{(s(b)+\epsilon)^2}$$
 
 ## Evaluation metrics and Results
 Given that the goal of using a GNN is to simultaneously infer the flow-rate at multiple gauges in the river, to get a sense if the model is actually learning how water flows in the river, the evaluation of the model must be done on each separate catchment, and we used the standard NSE metrics to do so, plus the more traditional ones (MSE, MAE, MAPE, RMSE).
