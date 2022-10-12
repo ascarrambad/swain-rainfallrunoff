@@ -1,5 +1,5 @@
 config_dir: 'tsl_config/'
 logs_dir: 'logs/'
-neptune_username: 'rivama'
-neptune_token: 'eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI3YmU5YzJiYy01YWU0LTQzN2UtYTE3Mi0wMTExOTczMDgzZDMifQ=='
+neptune_username: ''
+neptune_token: ''
 
